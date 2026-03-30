@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mail, Trash2, Settings, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2 } from 'lucide-react';
+import { Mail, Trash2, Settings, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -28,6 +28,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const fetchEmails = async () => {
     try {
@@ -160,19 +161,48 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-zinc-800">
+    <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-zinc-800 relative">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col">
-        <div className="p-4 border-b border-zinc-200 flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
-            <Mail className="w-5 h-5 text-white" />
+      <aside className={cn(
+        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out md:transform-none",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="p-4 border-b border-zinc-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <Mail className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-lg font-semibold text-zinc-900 tracking-tight">Mailbox</h1>
           </div>
-          <h1 className="text-lg font-semibold text-zinc-900 tracking-tight">Mailbox</h1>
+          <button 
+            className="md:hidden p-1 text-zinc-500 hover:bg-zinc-200 rounded"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="px-4 py-2 border-b border-zinc-200 bg-zinc-100/50 flex items-center gap-2 text-xs font-medium">
+          <Database className="w-3.5 h-3.5 text-zinc-500" />
+          <span className="text-zinc-600">Database:</span>
+          {error ? (
+            <span className="text-red-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Disconnected</span>
+          ) : (
+            <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Connected</span>
+          )}
         </div>
         
         <nav className="flex-1 p-3 space-y-1">
           <button
-            onClick={() => { setActiveTab('inbox'); setSelectedEmail(null); }}
+            onClick={() => { setActiveTab('inbox'); setSelectedEmail(null); setIsSidebarOpen(false); }}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
               activeTab === 'inbox' ? "bg-blue-100/50 text-blue-700" : "text-zinc-600 hover:bg-zinc-200/50"
@@ -188,7 +218,7 @@ export default function App() {
           </button>
           
           <button
-            onClick={() => { setActiveTab('trash'); setSelectedEmail(null); }}
+            onClick={() => { setActiveTab('trash'); setSelectedEmail(null); setIsSidebarOpen(false); }}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
               activeTab === 'trash' ? "bg-red-50 text-red-700" : "text-zinc-600 hover:bg-zinc-200/50"
@@ -199,7 +229,7 @@ export default function App() {
           </button>
           
           <button
-            onClick={() => { setActiveTab('settings'); setSelectedEmail(null); }}
+            onClick={() => { setActiveTab('settings'); setSelectedEmail(null); setIsSidebarOpen(false); }}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
               activeTab === 'settings' ? "bg-zinc-200/50 text-zinc-900" : "text-zinc-600 hover:bg-zinc-200/50"
@@ -222,10 +252,16 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white w-full">
         {/* Header */}
         <header className="bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-md transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             {selectedEmail && (
               <button 
                 onClick={() => setSelectedEmail(null)}
@@ -299,9 +335,9 @@ export default function App() {
               </div>
 
               <div className="prose prose-zinc max-w-none bg-white rounded-lg">
-                {selectedEmail.htmlBody ? (
+                {selectedEmail.htmlBody || (selectedEmail.fullBody && selectedEmail.fullBody.trim().startsWith('<')) ? (
                   <iframe
-                    srcDoc={selectedEmail.htmlBody}
+                    srcDoc={selectedEmail.htmlBody || selectedEmail.fullBody}
                     className="w-full min-h-[600px] border-0"
                     title="Email Content"
                     sandbox="allow-same-origin allow-popups"
