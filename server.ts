@@ -66,14 +66,26 @@ async function startServer() {
       }
 
       // Parse the raw email using mailparser
-      let parsedText = body;
+      let parsedText = '';
       let parsedHtml = '';
+      let finalSubject = subject || 'No Subject';
+      let finalFrom = from || 'Unknown Sender';
+
       try {
-        const parsed = await simpleParser(body);
-        parsedText = parsed.text || body;
+        // Ensure body is a string and trim leading whitespace/newlines
+        // Leading newlines cause mailparser to treat the whole string as body instead of headers
+        const rawEmailString = typeof body === 'string' ? body.trimStart() : String(body);
+        const parsed = await simpleParser(rawEmailString);
+        parsedText = parsed.text || '';
         parsedHtml = parsed.html || '';
+        if (parsed.subject) finalSubject = parsed.subject;
+        if (parsed.from && parsed.from.text) finalFrom = parsed.from.text;
       } catch (err) {
         console.error('Error parsing email:', err);
+      }
+
+      if (!parsedText && !parsedHtml) {
+        parsedText = body; // Fallback if parsing fails completely
       }
 
       // Rate Limiting by recipient address
@@ -84,29 +96,28 @@ async function startServer() {
       }
       rateLimitMap.set(to, now);
 
-      // Extract OTP (4 to 8 digits) - improved to avoid dates
+      // Extract OTP (4 to 8 digits) - improved to avoid dates and random numbers
       let otp = null;
-      // First try to find numbers near keywords like OTP, code, pin
-      const keywordMatch = parsedText.match(/(?:otp|code|pin|password|verification)[\s\S]{0,30}?\b(\d{4,8})\b/i);
+      const searchText = parsedText || parsedHtml || body;
+      
+      // Look for numbers near keywords (before or after, within 150 chars)
+      // Keywords: otp, code, pin, password, verification, token
+      const keywordRegex = /(?:(?:otp|code|pin|password|verification|token)[\s\S]{0,150}?\b(?!(?:19|20)\d{2}\b)(\d{4,8})\b)|(?:\b(?!(?:19|20)\d{2}\b)(\d{4,8})\b[\s\S]{0,150}?(?:otp|code|pin|password|verification|token))/i;
+      
+      const keywordMatch = searchText.match(keywordRegex);
       if (keywordMatch) {
-        otp = keywordMatch[1];
-      } else {
-        // Fallback: find 4-8 digit numbers but ignore 4-digit numbers starting with 19 or 20 (likely years)
-        const fallbackMatch = parsedText.match(/\b(?!(?:19|20)\d{2}\b)\d{4,8}\b/);
-        if (fallbackMatch) {
-          otp = fallbackMatch[0];
-        }
+        otp = keywordMatch[1] || keywordMatch[2];
       }
 
       // Save to MongoDB
       if (mongoose.connection.readyState === 1) {
         const newEmail = new Email({
           otp,
-          fullBody: parsedText,
+          fullBody: parsedText || body,
           htmlBody: parsedHtml,
           recipientAlias: to,
-          from: from || 'Unknown Sender',
-          subject: subject || 'No Subject',
+          from: finalFrom,
+          subject: finalSubject,
         });
         await newEmail.save();
         console.log(`Saved new email for ${to} with OTP: ${otp}`);

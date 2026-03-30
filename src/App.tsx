@@ -80,7 +80,7 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const latestEmailWithOtp = emails.find(e => e.otp);
+  const latestEmail = emails[0];
 
   if (liveMode) {
     return (
@@ -93,7 +93,12 @@ export default function App() {
           <span className="text-sm font-medium">Exit Live Mode</span>
         </button>
 
-        {latestEmailWithOtp ? (
+        {!latestEmail ? (
+          <div className="flex flex-col items-center text-zinc-500">
+            <RefreshCw className="w-12 h-12 animate-spin mb-4 opacity-20" />
+            <p className="text-xl font-medium">Waiting for incoming emails...</p>
+          </div>
+        ) : latestEmail.otp ? (
           <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
             <div className="text-zinc-500 mb-4 text-sm uppercase tracking-widest font-semibold flex items-center gap-2">
               <span className="relative flex h-3 w-3">
@@ -103,12 +108,12 @@ export default function App() {
               Latest OTP Received
             </div>
             <div className="text-[8rem] sm:text-[12rem] font-mono font-bold leading-none tracking-tighter text-white mb-8 drop-shadow-2xl">
-              {latestEmailWithOtp.otp}
+              {latestEmail.otp}
             </div>
             
             <div className="flex flex-col items-center gap-6">
               <button
-                onClick={() => handleCopy(latestEmailWithOtp.otp!)}
+                onClick={() => handleCopy(latestEmail.otp!)}
                 className={cn(
                   "flex items-center gap-3 px-8 py-4 rounded-full text-xl font-medium transition-all duration-300",
                   copied 
@@ -121,16 +126,26 @@ export default function App() {
               </button>
               
               <div className="flex items-center gap-4 text-zinc-400 text-sm">
-                <span>For: <span className="text-zinc-300 font-medium">{latestEmailWithOtp.recipientAlias}</span></span>
+                <span>For: <span className="text-zinc-300 font-medium">{latestEmail.recipientAlias}</span></span>
                 <span>•</span>
-                <span>Received {formatDistanceToNow(new Date(latestEmailWithOtp.timestamp))} ago</span>
+                <span>Received {formatDistanceToNow(new Date(latestEmail.timestamp))} ago</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center text-zinc-500">
-            <RefreshCw className="w-12 h-12 animate-spin mb-4 opacity-20" />
-            <p className="text-xl font-medium">Waiting for OTP emails...</p>
+          <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+            <div className="text-zinc-500 mb-4 text-sm uppercase tracking-widest font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-yellow-500" />
+              Latest Email Status
+            </div>
+            <div className="text-4xl sm:text-6xl font-mono font-bold leading-none tracking-tighter text-zinc-400 mb-8 drop-shadow-2xl">
+              NO OTP
+            </div>
+            <div className="flex items-center gap-4 text-zinc-500 text-sm">
+              <span>From: <span className="text-zinc-400 font-medium">{getSenderName(latestEmail.from)}</span></span>
+              <span>•</span>
+              <span>Received {formatDistanceToNow(new Date(latestEmail.timestamp))} ago</span>
+            </div>
           </div>
         )}
       </div>
@@ -334,12 +349,6 @@ export default function App() {
                             {email.fullBody.replace(/\s+/g, ' ').substring(0, 100)}
                           </span>
                         </div>
-
-                        {email.otp && (
-                          <div className="shrink-0 px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded border border-green-200">
-                            OTP: {email.otp}
-                          </div>
-                        )}
                         
                         <div className="w-24 shrink-0 text-right text-xs font-medium text-zinc-500 group-hover:hidden">
                           {formatDistanceToNow(new Date(email.timestamp), { addSuffix: true })}
