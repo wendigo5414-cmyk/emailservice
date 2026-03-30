@@ -38,9 +38,9 @@ export default function App() {
     }
   }, []);
 
-  const fetchEmails = async () => {
+  const fetchEmails = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) setLoading(true);
       const res = await fetch('/api/emails');
       if (!res.ok) throw new Error('Failed to fetch emails');
       const data = await res.json();
@@ -72,15 +72,17 @@ export default function App() {
       setEmails(data);
       setError(null);
     } catch (err) {
-      setError('Failed to connect to the server or database. Please ensure MONGO_URI is set.');
+      if (isInitial) {
+        setError('Failed to connect to the server or database. Please ensure MONGO_URI is set.');
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchEmails();
-    const interval = setInterval(fetchEmails, 5000); // Poll every 5 seconds
+    fetchEmails(true);
+    const interval = setInterval(() => fetchEmails(false), 5000); // Poll every 5 seconds
     return () => clearInterval(interval);
   }, []);
 
