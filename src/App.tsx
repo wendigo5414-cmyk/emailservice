@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mail, Trash2, Settings, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -29,6 +29,14 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const lastEmailIdRef = useRef<string | null>(null);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const fetchEmails = async () => {
     try {
@@ -36,6 +44,31 @@ export default function App() {
       const res = await fetch('/api/emails');
       if (!res.ok) throw new Error('Failed to fetch emails');
       const data = await res.json();
+      
+      if (data.length > 0) {
+        const latestId = data[0]._id;
+        
+        // Check for new emails and trigger notifications
+        if (lastEmailIdRef.current && lastEmailIdRef.current !== latestId) {
+          const newEmails = [];
+          for (const email of data) {
+            if (email._id === lastEmailIdRef.current) break;
+            newEmails.push(email);
+          }
+          
+          // Show notification for new emails with OTP
+          newEmails.forEach(email => {
+            if (email.otp && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification(`OTP: ${email.otp}`, {
+                body: `For: ${email.recipientAlias}`,
+              });
+            }
+          });
+        }
+        
+        lastEmailIdRef.current = latestId;
+      }
+
       setEmails(data);
       setError(null);
     } catch (err) {
@@ -165,14 +198,14 @@ export default function App() {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-40"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out md:transform-none shrink-0",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out shrink-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-4 border-b border-zinc-200 flex items-center justify-between gap-3">
@@ -183,7 +216,7 @@ export default function App() {
             <h1 className="text-lg font-semibold text-zinc-900 tracking-tight">Mailbox</h1>
           </div>
           <button 
-            className="md:hidden p-1 text-zinc-500 hover:bg-zinc-200 rounded"
+            className="p-1 text-zinc-500 hover:bg-zinc-200 rounded"
             onClick={() => setIsSidebarOpen(false)}
           >
             <X className="w-5 h-5" />
@@ -258,7 +291,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="md:hidden p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-md transition-colors"
+              className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-md transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>

@@ -225,12 +225,12 @@ async function startServer() {
     // Render provides RENDER_EXTERNAL_URL environment variable
     const pingUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
     
-    // Ping every 14 minutes (840000 ms) to prevent sleeping (Render sleeps after 15 mins)
+    // Ping every 5 minutes (300000 ms) as requested by user
     setInterval(() => {
       fetch(`${pingUrl}/api/health`)
-        .then(res => console.log(`[Auto-Ping] Status: ${res.status} at ${new Date().toISOString()}`))
+        .then(res => console.log(`[Auto-Ping] Successfully pinged ${pingUrl} to keep server awake. Status: ${res.status} at ${new Date().toISOString()}`))
         .catch(err => console.error(`[Auto-Ping] Failed:`, err.message));
-    }, 14 * 60 * 1000);
+    }, 5 * 60 * 1000);
   });
 }
 
