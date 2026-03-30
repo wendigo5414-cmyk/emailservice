@@ -54,7 +54,7 @@ async function startServer() {
       // Check API Secret Key if configured
       const expectedKey = process.env.API_SECRET_KEY;
       if (expectedKey) {
-        const providedKey = req.headers['x-api-secret-key'] || req.headers.authorization?.replace('Bearer ', '') || req.body.apiSecretKey;
+        const providedKey = req.headers['x-api-secret-key'] || req.headers['x-auth-key'] || req.headers.authorization?.replace('Bearer ', '') || req.body.apiSecretKey;
         if (providedKey !== expectedKey) {
           return res.status(401).json({ error: 'Unauthorized: Invalid API Secret Key' });
         }
@@ -85,6 +85,31 @@ async function startServer() {
         console.error('Error parsing email:', err);
       }
 
+      // Fallback: If mailparser fails to find HTML, but the raw body contains HTML tags, extract it manually
+      if (!parsedHtml && typeof body === 'string') {
+        const htmlStartIndex = body.indexOf('<!DOCTYPE html>');
+        const htmlStartIndex2 = body.indexOf('<html');
+        
+        const startIndex = htmlStartIndex !== -1 ? htmlStartIndex : (htmlStartIndex2 !== -1 ? htmlStartIndex2 : -1);
+        
+        if (startIndex !== -1) {
+          // Extract everything from the start of the HTML tag to the end of the string
+          parsedHtml = body.substring(startIndex);
+          
+          // Try to decode quoted-printable if it looks like it's encoded
+          if (parsedHtml.includes('=\r\n') || parsedHtml.includes('=\n') || parsedHtml.includes('=3D')) {
+            // Simple quoted-printable decoding for the fallback
+            parsedHtml = parsedHtml
+              .replace(/=\r\n/g, '')
+              .replace(/=\n/g, '')
+              .replace(/=3D/g, '=')
+              .replace(/=20/g, ' ')
+              .replace(/=09/g, '\t')
+              .replace(/=C2=A9/g, '©');
+          }
+        }
+      }
+
       if (!parsedText && !parsedHtml) {
         parsedText = body; // Fallback if parsing fails completely
       }
@@ -112,10 +137,13 @@ async function startServer() {
 
       // Save to MongoDB
       if (mongoose.connection.readyState === 1) {
+        // Ultimate fallback: ensure fullBody is never empty
+        const finalFullBody = parsedText || body || 'Empty Body';
+        
         const newEmail = new Email({
           otp,
-          fullBody: parsedText || body,
-          htmlBody: parsedHtml,
+          fullBody: finalFullBody,
+          htmlBody: parsedHtml || '',
           recipientAlias: to,
           from: finalFrom,
           subject: finalSubject,

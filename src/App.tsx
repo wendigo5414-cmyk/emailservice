@@ -172,7 +172,7 @@ export default function App() {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out md:transform-none",
+        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out md:transform-none shrink-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-4 border-b border-zinc-200 flex items-center justify-between gap-3">
@@ -190,7 +190,7 @@ export default function App() {
           </button>
         </div>
         
-        <div className="px-4 py-2 border-b border-zinc-200 bg-zinc-100/50 flex items-center gap-2 text-xs font-medium">
+        <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-100/50 flex items-center gap-2 text-xs font-medium">
           <Database className="w-3.5 h-3.5 text-zinc-500" />
           <span className="text-zinc-600">Database:</span>
           {error ? (
