@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Trash2, Settings, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -116,6 +116,13 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Helper to extract name from "Name <email@domain.com>" format
+  const getSenderName = (fromStr?: string) => {
+    if (!fromStr) return 'Unknown Sender';
+    const match = fromStr.match(/^([^<]+)</);
+    return match ? match[1].trim() : fromStr;
+  };
+
   const latestEmail = emails[0];
 
   if (liveMode) {
@@ -187,13 +194,6 @@ export default function App() {
       </div>
     );
   }
-
-  // Helper to extract name from "Name <email@domain.com>" format
-  const getSenderName = (fromStr?: string) => {
-    if (!fromStr) return 'Unknown Sender';
-    const match = fromStr.match(/^([^<]+)</);
-    return match ? match[1].trim() : fromStr;
-  };
 
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-zinc-800 relative">
