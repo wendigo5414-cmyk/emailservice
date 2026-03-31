@@ -28,52 +28,61 @@ const emailSchema = new mongoose.Schema({
 
 const Email = mongoose.model('Email', emailSchema);
 
-// --- Discord Webhook Helper ---
-async function sendToDiscordWithRetry(webhookUrl: string, messageContent: string, maxRetries = 3) {
+// --- Discord Bot REST Helper ---
+async function sendToDiscordBotWithRetry(botToken: string, channelId: string, messageContent: string, maxRetries = 5) {
+  const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
+  
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(webhookUrl, {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bot ${botToken}`
+        },
         body: JSON.stringify({ content: messageContent })
       });
 
       if (res.ok) {
-        console.log(`[Discord Webhook] Successfully forwarded OTP to Discord! Status: ${res.status}`);
+        console.log(`[Discord Bot] Successfully forwarded OTP to Discord! Status: ${res.status}`);
         return; // Success, exit the function
       }
 
       if (res.status === 429) {
         // Rate limited
         const errorData = await res.json().catch(() => ({}));
-        // Discord retry_after is usually in seconds (float), but let's be safe.
-        // If it's not provided, default to 2 seconds.
-        let retryAfterMs = 2000; 
+        
+        // Discord rate limits can be tricky. Let's use an exponential backoff 
+        // if retry_after is missing or too small, to be safe.
+        let retryAfterMs = 5000 * attempt; // 5s, 10s, 15s...
+        
         if (errorData.retry_after) {
-           // If it's a small number, it's likely seconds. If large, ms.
-           retryAfterMs = errorData.retry_after < 1000 ? errorData.retry_after * 1000 : errorData.retry_after;
+           // Discord's retry_after is usually in seconds.
+           const discordWaitMs = errorData.retry_after < 1000 ? errorData.retry_after * 1000 : errorData.retry_after;
+           // Use the larger of our backoff or Discord's suggestion, plus a 1s buffer
+           retryAfterMs = Math.max(retryAfterMs, discordWaitMs + 1000);
         }
         
-        console.warn(`[Discord Webhook] Rate limited (429). Discord says wait ${retryAfterMs}ms. (Attempt ${attempt}/${maxRetries})`);
+        console.warn(`[Discord Bot] Rate limited (429). Waiting ${retryAfterMs}ms before next attempt. (Attempt ${attempt}/${maxRetries})`);
         
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryAfterMs));
           continue; // Try again
         } else {
-          console.error(`[Discord Webhook] Max retries reached. Failed to send OTP after ${maxRetries} attempts.`);
+          console.error(`[Discord Bot] Max retries reached. Failed to send OTP after ${maxRetries} attempts.`);
           return;
         }
       }
 
       // Other errors (400, 401, 404, etc.) - don't retry
       const errorText = await res.text();
-      console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
+      console.error(`[Discord Bot] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
       return;
       
     } catch (err: any) {
-      console.error(`[Discord Webhook] Network/Fetch Error (Attempt ${attempt}/${maxRetries}):`, err.message);
+      console.error(`[Discord Bot] Network/Fetch Error (Attempt ${attempt}/${maxRetries}):`, err.message);
       if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s before retrying network error
+        await new Promise(resolve => setTimeout(resolve, 5000)); // wait 5s before retrying network error
       }
     }
   }
@@ -202,29 +211,31 @@ async function startServer() {
         await newEmail.save();
         console.log(`Saved new email for ${to} with OTP: ${otp}`);
 
-        // Send to Discord Webhook if OTP exists
+        // Send to Discord Bot if OTP exists
         if (otp) {
-          console.log(`[Discord Webhook] Attempting to send OTP for ${to}...`);
-          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+          console.log(`[Discord Bot] Attempting to send OTP for ${to}...`);
+          const botToken = process.env.DISCORD_BOT_TOKEN;
+          // Fallback to DISCORD_WEBHOOK_URL if user put channel ID there as discussed
+          const channelId = process.env.DISCORD_CHANNEL_ID || process.env.DISCORD_WEBHOOK_URL;
           
-          if (!webhookUrl) {
-            console.error('[Discord Webhook] Error: DISCORD_WEBHOOK_URL environment variable is not set. Cannot forward OTP.');
+          if (!botToken || !channelId) {
+            console.error('[Discord Bot] Error: DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID environment variable is not set. Cannot forward OTP.');
           } else {
-            console.log(`[Discord Webhook] Webhook URL is configured. Preparing message...`);
+            console.log(`[Discord Bot] Bot Token and Channel ID configured. Preparing message...`);
             const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
             
             try {
-              console.log(`[Discord Webhook] Sending payload to Discord...`);
+              console.log(`[Discord Bot] Sending payload to Discord REST API...`);
               // Use the new retry helper function without blocking the main thread
-              sendToDiscordWithRetry(webhookUrl, messageContent).catch(err => {
-                console.error(`[Discord Webhook] Unhandled error in retry helper:`, err);
+              sendToDiscordBotWithRetry(botToken, channelId, messageContent).catch(err => {
+                console.error(`[Discord Bot] Unhandled error in retry helper:`, err);
               });
             } catch (err: any) {
-              console.error(`[Discord Webhook] Error initiating fetch (maybe fetch is not supported in this Node version?):`, err.message, err.stack);
+              console.error(`[Discord Bot] Error initiating fetch:`, err.message, err.stack);
             }
           }
         } else {
-          console.log(`[Discord Webhook] No OTP found in email for ${to}, skipping Discord webhook.`);
+          console.log(`[Discord Bot] No OTP found in email for ${to}, skipping Discord bot.`);
         }
       } else {
         console.warn('MongoDB not connected. Email received but not saved.');
