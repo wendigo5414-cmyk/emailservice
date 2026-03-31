@@ -153,14 +153,17 @@ async function startServer() {
 
         // Send to Discord Webhook if OTP exists
         if (otp) {
+          console.log(`[Discord Webhook] Attempting to send OTP for ${to}...`);
           const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
           
           if (!webhookUrl) {
             console.error('[Discord Webhook] Error: DISCORD_WEBHOOK_URL environment variable is not set. Cannot forward OTP.');
           } else {
+            console.log(`[Discord Webhook] Webhook URL is configured. Preparing message...`);
             const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
             
             try {
+              console.log(`[Discord Webhook] Sending payload to Discord...`);
               fetch(webhookUrl, {
                 method: 'POST',
                 headers: {
@@ -169,16 +172,22 @@ async function startServer() {
                 body: JSON.stringify({
                   content: messageContent
                 })
-              }).then(res => {
-                if (res.ok) console.log(`[Discord Webhook] Successfully forwarded OTP`);
-                else console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}`);
+              }).then(async res => {
+                if (res.ok) {
+                  console.log(`[Discord Webhook] Successfully forwarded OTP to Discord! Status: ${res.status}`);
+                } else {
+                  const errorText = await res.text();
+                  console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
+                }
               }).catch(err => {
-                console.error(`[Discord Webhook] Error forwarding OTP:`, err.message);
+                console.error(`[Discord Webhook] Network/Fetch Error forwarding OTP:`, err.message, err.stack);
               });
-            } catch (err) {
-              console.error(`[Discord Webhook] Error initiating fetch:`, err);
+            } catch (err: any) {
+              console.error(`[Discord Webhook] Error initiating fetch (maybe fetch is not supported in this Node version?):`, err.message, err.stack);
             }
           }
+        } else {
+          console.log(`[Discord Webhook] No OTP found in email for ${to}, skipping Discord webhook.`);
         }
       } else {
         console.warn('MongoDB not connected. Email received but not saved.');
