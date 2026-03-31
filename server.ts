@@ -151,31 +151,28 @@ async function startServer() {
         await newEmail.save();
         console.log(`Saved new email for ${to} with OTP: ${otp}`);
 
-        // Send to Discord Bot if OTP exists
+        // Send to Discord Webhook if OTP exists
         if (otp) {
-          const botUrl = process.env.DISCORD_BOT_URL || 'https://bot-lyny.onrender.com/webhook/otp';
-          const botSecret = process.env.BOT_SECRET_KEY || 'my_super_secret_key_123';
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1488439801064718349/6iQuFLUz3b0JatSJNqwknhXI0E4m7mQ7R4xkmDn2xFbWPCdyl2MKlg5F5bHMG980y_OP';
+          const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
           
           try {
-            fetch(botUrl, {
+            fetch(webhookUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'x-bot-secret': botSecret
               },
               body: JSON.stringify({
-                email: to,
-                otp: otp,
-                sender: finalFrom
+                content: messageContent
               })
             }).then(res => {
-              if (res.ok) console.log(`[Discord Bot] Successfully forwarded OTP to bot`);
-              else console.error(`[Discord Bot] Failed to forward OTP. Status: ${res.status}`);
+              if (res.ok) console.log(`[Discord Webhook] Successfully forwarded OTP`);
+              else console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}`);
             }).catch(err => {
-              console.error(`[Discord Bot] Error forwarding OTP:`, err.message);
+              console.error(`[Discord Webhook] Error forwarding OTP:`, err.message);
             });
           } catch (err) {
-            console.error(`[Discord Bot] Error initiating fetch:`, err);
+            console.error(`[Discord Webhook] Error initiating fetch:`, err);
           }
         }
       } else {
