@@ -28,6 +28,57 @@ const emailSchema = new mongoose.Schema({
 
 const Email = mongoose.model('Email', emailSchema);
 
+// --- Discord Webhook Helper ---
+async function sendToDiscordWithRetry(webhookUrl: string, messageContent: string, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: messageContent })
+      });
+
+      if (res.ok) {
+        console.log(`[Discord Webhook] Successfully forwarded OTP to Discord! Status: ${res.status}`);
+        return; // Success, exit the function
+      }
+
+      if (res.status === 429) {
+        // Rate limited
+        const errorData = await res.json().catch(() => ({}));
+        // Discord retry_after is usually in seconds (float), but let's be safe.
+        // If it's not provided, default to 2 seconds.
+        let retryAfterMs = 2000; 
+        if (errorData.retry_after) {
+           // If it's a small number, it's likely seconds. If large, ms.
+           retryAfterMs = errorData.retry_after < 1000 ? errorData.retry_after * 1000 : errorData.retry_after;
+        }
+        
+        console.warn(`[Discord Webhook] Rate limited (429). Discord says wait ${retryAfterMs}ms. (Attempt ${attempt}/${maxRetries})`);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryAfterMs));
+          continue; // Try again
+        } else {
+          console.error(`[Discord Webhook] Max retries reached. Failed to send OTP after ${maxRetries} attempts.`);
+          return;
+        }
+      }
+
+      // Other errors (400, 401, 404, etc.) - don't retry
+      const errorText = await res.text();
+      console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
+      return;
+      
+    } catch (err: any) {
+      console.error(`[Discord Webhook] Network/Fetch Error (Attempt ${attempt}/${maxRetries}):`, err.message);
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s before retrying network error
+      }
+    }
+  }
+}
+
 // --- Express App Setup ---
 async function startServer() {
   const app = express();
@@ -164,23 +215,9 @@ async function startServer() {
             
             try {
               console.log(`[Discord Webhook] Sending payload to Discord...`);
-              fetch(webhookUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  content: messageContent
-                })
-              }).then(async res => {
-                if (res.ok) {
-                  console.log(`[Discord Webhook] Successfully forwarded OTP to Discord! Status: ${res.status}`);
-                } else {
-                  const errorText = await res.text();
-                  console.error(`[Discord Webhook] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
-                }
-              }).catch(err => {
-                console.error(`[Discord Webhook] Network/Fetch Error forwarding OTP:`, err.message, err.stack);
+              // Use the new retry helper function without blocking the main thread
+              sendToDiscordWithRetry(webhookUrl, messageContent).catch(err => {
+                console.error(`[Discord Webhook] Unhandled error in retry helper:`, err);
               });
             } catch (err: any) {
               console.error(`[Discord Webhook] Error initiating fetch (maybe fetch is not supported in this Node version?):`, err.message, err.stack);
