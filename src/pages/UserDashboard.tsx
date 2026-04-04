@@ -10,16 +10,27 @@ export default function UserDashboard() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!token) {
+      setEmails([]);
+      setLoading(false);
+      return;
+    }
+
     fetch('/api/my-emails', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => {
-        setEmails(data);
+        if (Array.isArray(data)) {
+          setEmails(data);
+        } else {
+          setEmails([]);
+        }
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setEmails([]);
         setLoading(false);
       });
   }, [token]);
@@ -31,7 +42,7 @@ export default function UserDashboard() {
   };
 
   return (
-    <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
       <h1 className="text-3xl font-bold mb-8 text-white border-b border-white/10 pb-4">My Items</h1>
 
       {loading ? (
