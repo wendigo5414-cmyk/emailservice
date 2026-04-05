@@ -3,58 +3,18 @@ import mongoose from 'mongoose';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { simpleParser } from 'mailparser';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 
 // --- MongoDB Setup ---
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/nexus-hub';
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-nexus-hub-2026';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/email-otp-bot';
 
+// Connect to MongoDB only if MONGO_URI is provided and not a placeholder
 if (process.env.MONGO_URI && process.env.MONGO_URI !== 'YOUR_MONGO_URI_HERE') {
   mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
 } else {
-  console.warn('MONGO_URI is not set. MongoDB will not be connected.');
+  console.warn('MONGO_URI is not set or is a placeholder. MongoDB will not be connected.');
 }
-
-// --- Schemas ---
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  isAdmin: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
-});
-const User = mongoose.model('User', userSchema);
-
-const productSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  description: { type: String },
-  price: { type: Number, required: true },
-  thumbnail: { type: String },
-  type: { type: String, enum: ['activated_email', 'account', 'service'], default: 'account' },
-  stock: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now }
-});
-const Product = mongoose.model('Product', productSchema);
-
-const orderSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  items: [{
-    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-    name: String,
-    price: Number,
-    quantity: Number
-  }],
-  totalAmount: { type: Number, required: true },
-  exactCryptoAmount: { type: Number, required: true },
-  cryptoCurrency: { type: String, required: true },
-  customerDetails: { type: mongoose.Schema.Types.Mixed },
-  status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
-  createdAt: { type: Date, default: Date.now }
-});
-const Order = mongoose.model('Order', orderSchema);
 
 const emailSchema = new mongoose.Schema({
   otp: { type: String, required: false },
@@ -63,352 +23,269 @@ const emailSchema = new mongoose.Schema({
   recipientAlias: { type: String, required: true },
   from: { type: String, required: false },
   subject: { type: String, required: false },
-  status: { type: String, enum: ['pending', 'stock', 'sold', 'admin'], default: 'pending' },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-  receivedAt: { type: Date, default: Date.now },
+  timestamp: { type: Date, default: Date.now },
 });
+
 const Email = mongoose.model('Email', emailSchema);
 
-const configSchema = new mongoose.Schema({
-  key: { type: String, required: true, unique: true },
-  value: { type: mongoose.Schema.Types.Mixed, required: true }
-});
-const Config = mongoose.model('Config', configSchema);
+// --- Discord Bot REST Helper ---
+async function sendToDiscordBotWithRetry(botToken: string, channelId: string, messageContent: string, maxRetries = 5) {
+  const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bot ${botToken}`
+        },
+        body: JSON.stringify({ content: messageContent })
+      });
 
-// Initialize Config
-async function initConfig() {
-  if (mongoose.connection.readyState === 1) {
-    const modeConfig = await Config.findOne({ key: 'emailMode' });
-    if (!modeConfig) {
-      await new Config({ key: 'emailMode', value: 'STOCKING' }).save();
+      if (res.ok) {
+        console.log(`[Discord Bot] Successfully forwarded OTP to Discord! Status: ${res.status}`);
+        return; // Success, exit the function
+      }
+
+      if (res.status === 429) {
+        // Rate limited
+        const errorData = await res.json().catch(() => ({}));
+        
+        // Discord rate limits can be tricky. Let's use an exponential backoff 
+        // if retry_after is missing or too small, to be safe.
+        let retryAfterMs = 5000 * attempt; // 5s, 10s, 15s...
+        
+        if (errorData.retry_after) {
+           // Discord's retry_after is usually in seconds.
+           const discordWaitMs = errorData.retry_after < 1000 ? errorData.retry_after * 1000 : errorData.retry_after;
+           // Use the larger of our backoff or Discord's suggestion, plus a 1s buffer
+           retryAfterMs = Math.max(retryAfterMs, discordWaitMs + 1000);
+        }
+        
+        console.warn(`[Discord Bot] Rate limited (429). Waiting ${retryAfterMs}ms before next attempt. (Attempt ${attempt}/${maxRetries})`);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryAfterMs));
+          continue; // Try again
+        } else {
+          console.error(`[Discord Bot] Max retries reached. Failed to send OTP after ${maxRetries} attempts.`);
+          return;
+        }
+      }
+
+      // Other errors (400, 401, 404, etc.) - don't retry
+      const errorText = await res.text();
+      console.error(`[Discord Bot] Failed to forward OTP. Status: ${res.status}, Response: ${errorText}`);
+      return;
+      
+    } catch (err: any) {
+      console.error(`[Discord Bot] Network/Fetch Error (Attempt ${attempt}/${maxRetries}):`, err.message);
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 5000)); // wait 5s before retrying network error
+      }
     }
   }
 }
-mongoose.connection.once('open', initConfig);
-
-// --- Middleware ---
-const authenticateToken = (req: any, res: any, next: any) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied' });
-
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
-
-const isAdmin = (req: any, res: any, next: any) => {
-  if (req.user && req.user.isAdmin) {
-    next();
-  } else {
-    res.status(403).json({ error: 'Admin access required' });
-  }
-};
 
 // --- Express App Setup ---
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Middleware to parse JSON bodies
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // --- Auth Routes ---
-  app.post('/api/auth/register', async (req, res) => {
+  // --- API Routes ---
+  
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  // Simple in-memory rate limiter for the webhook
+  const rateLimitMap = new Map<string, number>();
+  const RATE_LIMIT_WINDOW_MS = 10000; // 10 seconds
+
+  // Webhook to receive emails from Cloudflare Worker
+  app.post('/webhook/email', async (req, res) => {
     try {
-      const { username, email, password } = req.body;
-      if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
-
-      const existingUser = await User.findOne({ $or: [{ username }, { email }] });
-      if (existingUser) return res.status(400).json({ error: 'Username or email already exists' });
-
-      // Check if user should be admin based on ENV variables or specific email
-      let isUserAdmin = false;
-      if (email === 'rracfo@gmail.com') {
-        isUserAdmin = true;
-      }
-      for (let i = 1; i <= 5; i++) {
-        const adminUsername = process.env[`ADMIN_USER_${i}`];
-        if (adminUsername && adminUsername === username) {
-          isUserAdmin = true;
-          break;
+      // Check API Secret Key if configured
+      const expectedKey = process.env.API_SECRET_KEY;
+      if (expectedKey) {
+        const providedKey = req.headers['x-api-secret-key'] || req.headers['x-auth-key'] || req.headers.authorization?.replace('Bearer ', '') || req.body.apiSecretKey;
+        if (providedKey !== expectedKey) {
+          return res.status(401).json({ error: 'Unauthorized: Invalid API Secret Key' });
         }
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser = new User({ username, email, password: hashedPassword, isAdmin: isUserAdmin });
-      await newUser.save();
+      const { from, to, subject, body } = req.body;
 
-      const token = jwt.sign({ id: newUser._id, username: newUser.username, isAdmin: newUser.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-      res.json({ token, user: { id: newUser._id, username: newUser.username, email: newUser.email, isAdmin: newUser.isAdmin } });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const { identifier, password } = req.body; // identifier can be username or email
-      if (!identifier || !password) return res.status(400).json({ error: 'Identifier and password required' });
-
-      const user = await User.findOne({ $or: [{ username: identifier }, { email: identifier }] });
-      if (!user) return res.status(400).json({ error: 'Invalid credentials' });
-
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) return res.status(400).json({ error: 'Invalid credentials' });
-
-      // Auto-upgrade to admin if email matches
-      if (user.email === 'rracfo@gmail.com' && !user.isAdmin) {
-        user.isAdmin = true;
-        await user.save();
+      if (!body || !to) {
+        return res.status(400).json({ error: 'Missing body or to address' });
       }
 
-      const token = jwt.sign({ id: user._id, username: user.username, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-      res.json({ token, user: { id: user._id, username: user.username, email: user.email, isAdmin: user.isAdmin } });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
+      // Parse the raw email using mailparser
+      let parsedText = '';
+      let parsedHtml = '';
+      let finalSubject = subject || 'No Subject';
+      let finalFrom = from || 'Unknown Sender';
 
-  app.get('/api/auth/me', authenticateToken, async (req: any, res) => {
-    try {
-      const user = await User.findById(req.user.id).select('-password');
-      if (!user) return res.status(404).json({ error: 'User not found' });
-      res.json({ user });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  // --- Shop Routes ---
-  app.get('/api/products', async (req, res) => {
-    try {
-      // Auto-update pending emails to stock if older than 7 days
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      await Email.updateMany(
-        { status: 'pending', receivedAt: { $lte: sevenDaysAgo } },
-        { $set: { status: 'stock' } }
-      );
-
-      const products = await Product.find();
-      
-      // Calculate dynamic stock for 'activated_email' products
-      const stockCount = await Email.countDocuments({ status: 'stock' });
-      
-      const productsWithDynamicStock = products.map(p => {
-        if (p.type === 'activated_email') {
-          return { ...p.toObject(), stock: stockCount };
-        }
-        return p;
-      });
-
-      res.json(productsWithDynamicStock);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  // --- Checkout Route ---
-  app.post('/api/checkout', authenticateToken, async (req: any, res) => {
-    try {
-      const { items, customerDetails, cryptoCurrency } = req.body;
-      if (!items || items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
-
-      let totalAmount = 0;
-      for (const item of items) {
-        const product = await Product.findById(item.productId);
-        if (!product) return res.status(400).json({ error: `Product not found: ${item.name}` });
-        totalAmount += product.price * item.quantity;
+      try {
+        // Ensure body is a string and trim leading whitespace/newlines
+        // Leading newlines cause mailparser to treat the whole string as body instead of headers
+        const rawEmailString = typeof body === 'string' ? body.trimStart() : String(body);
+        const parsed = await simpleParser(rawEmailString);
+        parsedText = parsed.text || '';
+        parsedHtml = parsed.html || '';
+        if (parsed.subject) finalSubject = parsed.subject;
+        if (parsed.from && parsed.from.text) finalFrom = parsed.from.text;
+      } catch (err) {
+        console.error('Error parsing email:', err);
       }
 
-      // Add random cents for tracking (e.g., 15.00 -> 15.07)
-      const randomCents = Math.floor(Math.random() * 99) + 1;
-      const exactCryptoAmount = totalAmount + (randomCents / 100);
-
-      const order = new Order({
-        userId: req.user.id,
-        items,
-        totalAmount,
-        exactCryptoAmount,
-        cryptoCurrency,
-        customerDetails,
-        status: 'pending'
-      });
-
-      await order.save();
-      res.json({ orderId: order._id, exactCryptoAmount, cryptoCurrency });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  // --- User Emails Route ---
-  app.get('/api/my-emails', authenticateToken, async (req: any, res) => {
-    try {
-      const emails = await Email.find({ assignedTo: req.user.id }).sort({ receivedAt: -1 });
-      res.json(emails);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  // --- Admin Routes ---
-  app.get('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const config = await Config.find();
-      res.json(config);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.post('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const { key, value } = req.body;
-      await Config.findOneAndUpdate({ key }, { value }, { upsert: true });
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.post('/api/admin/products', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const product = new Product(req.body);
-      await product.save();
-      res.json(product);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.get('/api/admin/orders', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const orders = await Order.find().populate('userId', 'username email').sort({ createdAt: -1 });
-      res.json(orders);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.post('/api/admin/orders/:id/complete', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const order = await Order.findById(req.params.id);
-      if (!order) return res.status(404).json({ error: 'Order not found' });
-
-      order.status = 'completed';
-      await order.save();
-
-      // If order contains activated_emails, assign them
-      for (const item of order.items) {
-        const product = await Product.findById(item.productId);
-        if (product && product.type === 'activated_email') {
-          const emailsToAssign = await Email.find({ status: 'stock' }).limit(item.quantity);
-          for (const email of emailsToAssign) {
-            email.status = 'sold';
-            email.assignedTo = order.userId;
-            await email.save();
+      // Fallback: If mailparser fails to find HTML, but the raw body contains HTML tags, extract it manually
+      if (!parsedHtml && typeof body === 'string') {
+        const htmlStartIndex = body.indexOf('<!DOCTYPE html>');
+        const htmlStartIndex2 = body.indexOf('<html');
+        
+        const startIndex = htmlStartIndex !== -1 ? htmlStartIndex : (htmlStartIndex2 !== -1 ? htmlStartIndex2 : -1);
+        
+        if (startIndex !== -1) {
+          // Extract everything from the start of the HTML tag to the end of the string
+          parsedHtml = body.substring(startIndex);
+          
+          // Try to decode quoted-printable if it looks like it's encoded
+          if (parsedHtml.includes('=\r\n') || parsedHtml.includes('=\n') || parsedHtml.includes('=3D')) {
+            // Simple quoted-printable decoding for the fallback
+            parsedHtml = parsedHtml
+              .replace(/=\r\n/g, '')
+              .replace(/=\n/g, '')
+              .replace(/=3D/g, '=')
+              .replace(/=20/g, ' ')
+              .replace(/=09/g, '\t')
+              .replace(/=C2=A9/g, '©');
           }
         }
       }
 
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.get('/api/admin/emails', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      const emails = await Email.find({ status: { $ne: 'sold' } }).sort({ receivedAt: -1 });
-      res.json(emails);
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  app.delete('/api/admin/emails/:id', authenticateToken, isAdmin, async (req, res) => {
-    try {
-      await Email.findByIdAndDelete(req.params.id);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-
-  // --- Webhook Route (Email Receiver) ---
-  app.post('/api/webhook/email', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      const xAuthKey = req.headers['x-auth-key'];
-      const expectedAuth = process.env.API_SECRET_KEY || 'keyxxx';
-      
-      const isAuthorized = 
-        (authHeader && authHeader === `Bearer ${expectedAuth}`) || 
-        (xAuthKey && xAuthKey === expectedAuth);
-
-      if (!isAuthorized) {
-        return res.status(401).json({ error: 'Unauthorized' });
+      if (!parsedText && !parsedHtml) {
+        parsedText = body; // Fallback if parsing fails completely
       }
 
-      if (mongoose.connection.readyState !== 1) {
-        return res.status(503).json({ error: 'Database not connected' });
+      // Rate Limiting by recipient address
+      const now = Date.now();
+      const lastReceived = rateLimitMap.get(to) || 0;
+      if (now - lastReceived < RATE_LIMIT_WINDOW_MS) {
+        return res.status(429).json({ error: 'Rate limit exceeded. Please wait 10 seconds.' });
       }
+      rateLimitMap.set(to, now);
 
-      const modeConfig = await Config.findOne({ key: 'emailMode' });
-      const currentMode = modeConfig ? modeConfig.value : 'STOCKING';
-
-      if (currentMode === 'OFF') {
-        return res.status(200).json({ success: true, message: 'Ignored (Mode OFF)' });
-      }
-
-      const { to, from, subject, body } = req.body;
-      if (!to || !body) {
-        return res.status(400).json({ error: 'Missing required fields: to, body' });
-      }
-
-      let parsedText = '';
-      let parsedHtml = '';
-      
-      if (body.includes('MIME-Version:') || body.includes('Content-Type:')) {
-        try {
-          const parsed = await simpleParser(body);
-          parsedText = parsed.text || '';
-          parsedHtml = parsed.html || '';
-        } catch (parseErr) {
-          console.error('Error parsing email body:', parseErr);
-        }
-      } else {
-        parsedText = body;
-      }
-
-      // Extract OTP
+      // Extract OTP (4 to 8 digits) - improved to avoid dates and random numbers
       let otp = null;
       const searchText = parsedText || parsedHtml || body;
+      
+      // Look for numbers near keywords (before or after, within 150 chars)
+      // Keywords: otp, code, pin, password, verification, token
       const keywordRegex = /(?:(?:otp|code|pin|password|verification|token)[\s\S]{0,150}?\b(?!(?:19|20)\d{2}\b)(\d{4,8})\b)|(?:\b(?!(?:19|20)\d{2}\b)(\d{4,8})\b[\s\S]{0,150}?(?:otp|code|pin|password|verification|token))/i;
+      
       const keywordMatch = searchText.match(keywordRegex);
       if (keywordMatch) {
         otp = keywordMatch[1] || keywordMatch[2];
       }
 
-      const finalStatus = currentMode === 'ADMIN' ? 'admin' : 'pending';
+      // Save to MongoDB
+      if (mongoose.connection.readyState === 1) {
+        // Ultimate fallback: ensure fullBody is never empty
+        const finalFullBody = parsedText || body || 'Empty Body';
+        
+        const newEmail = new Email({
+          otp,
+          fullBody: finalFullBody,
+          htmlBody: parsedHtml || '',
+          recipientAlias: to,
+          from: finalFrom,
+          subject: finalSubject,
+        });
+        await newEmail.save();
+        console.log(`Saved new email for ${to} with OTP: ${otp}`);
 
-      const newEmail = new Email({
-        otp,
-        fullBody: parsedText || body,
-        htmlBody: parsedHtml || '',
-        recipientAlias: to,
-        from,
-        subject,
-        status: finalStatus
-      });
-      await newEmail.save();
+        // Send to Discord Bot if OTP exists
+        if (otp) {
+          console.log(`[Discord Bot] Attempting to send OTP for ${to}...`);
+          const botToken = process.env.DISCORD_BOT_TOKEN;
+          // Fallback to DISCORD_WEBHOOK_URL if user put channel ID there as discussed
+          const channelId = process.env.DISCORD_CHANNEL_ID || process.env.DISCORD_WEBHOOK_URL;
+          
+          if (!botToken || !channelId) {
+            console.error('[Discord Bot] Error: DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID environment variable is not set. Cannot forward OTP.');
+          } else {
+            console.log(`[Discord Bot] Bot Token and Channel ID configured. Preparing message...`);
+            const messageContent = `**New OTP Received!**\nGmail: ${to}\nPC - \`\`\`${otp}\`\`\`\nMobile - \`${otp}\``;
+            
+            try {
+              console.log(`[Discord Bot] Sending payload to Discord REST API...`);
+              // Use the new retry helper function without blocking the main thread
+              sendToDiscordBotWithRetry(botToken, channelId, messageContent).catch(err => {
+                console.error(`[Discord Bot] Unhandled error in retry helper:`, err);
+              });
+            } catch (err: any) {
+              console.error(`[Discord Bot] Error initiating fetch:`, err.message, err.stack);
+            }
+          }
+        } else {
+          console.log(`[Discord Bot] No OTP found in email for ${to}, skipping Discord bot.`);
+        }
+      } else {
+        console.warn('MongoDB not connected. Email received but not saved.');
+      }
 
-      res.status(200).json({ success: true, message: `Email saved as ${finalStatus}` });
+      res.status(200).json({ success: true, message: 'Email processed successfully' });
     } catch (error) {
       console.error('Webhook error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Get all emails
+  app.get('/api/emails', async (req, res) => {
+    try {
+      if (mongoose.connection.readyState !== 1) {
+        return res.json([]); // Return empty array if not connected
+      }
+      const emails = await Email.find().sort({ timestamp: -1 }).limit(100);
+      res.json(emails);
+    } catch (error) {
+      console.error('Error fetching emails:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Delete a specific email
+  app.delete('/api/emails/:id', async (req, res) => {
+    try {
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({ error: 'Database not connected' });
+      }
+      await Email.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting email:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Delete all emails
+  app.delete('/api/emails', async (req, res) => {
+    try {
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({ error: 'Database not connected' });
+      }
+      await Email.deleteMany({});
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting all emails:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -421,14 +298,26 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(process.cwd(), 'dist')));
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+
+    // Auto-ping to keep Render free tier awake
+    // Render provides RENDER_EXTERNAL_URL environment variable
+    const pingUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
+    
+    // Ping every 5 minutes (300000 ms) as requested by user
+    setInterval(() => {
+      fetch(`${pingUrl}/api/health`)
+        .then(res => console.log(`[Auto-Ping] Successfully pinged ${pingUrl} to keep server awake. Status: ${res.status} at ${new Date().toISOString()}`))
+        .catch(err => console.error(`[Auto-Ping] Failed:`, err.message));
+    }, 5 * 60 * 1000);
   });
 }
 
