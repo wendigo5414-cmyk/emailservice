@@ -17,6 +17,7 @@ export default function Shop() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const addItem = useCartStore(state => state.addItem);
 
   useEffect(() => {
@@ -32,9 +33,16 @@ export default function Shop() {
       });
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+    p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) || 
+    p.description.toLowerCase().includes(debouncedQuery.toLowerCase())
   );
 
   return (
@@ -46,7 +54,7 @@ export default function Shop() {
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="text-center mb-20 relative"
       >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-neon-purple/20 rounded-full blur-[120px] -z-10"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-neon-purple/20 rounded-full blur-[100px] transform-gpu -z-10"></div>
         
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
@@ -66,15 +74,15 @@ export default function Shop() {
         </p>
         
         <div className="flex flex-wrap justify-center gap-4 mt-10">
-          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 backdrop-blur-xl px-6 py-3.5 rounded-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 px-6 py-3.5 rounded-2xl border border-white/10 shadow-lg">
             <div className="p-2 bg-neon-orange/10 rounded-lg"><Zap className="w-5 h-5 text-neon-orange" /></div>
             <span className="font-semibold tracking-wide">Instant Delivery</span>
           </motion.div>
-          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 backdrop-blur-xl px-6 py-3.5 rounded-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 px-6 py-3.5 rounded-2xl border border-white/10 shadow-lg">
             <div className="p-2 bg-neon-green/10 rounded-lg"><Shield className="w-5 h-5 text-neon-green" /></div>
             <span className="font-semibold tracking-wide">Secure Crypto</span>
           </motion.div>
-          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 backdrop-blur-xl px-6 py-3.5 rounded-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+          <motion.div whileHover={{ y: -2 }} className="flex items-center gap-3 text-sm text-white bg-white/5 px-6 py-3.5 rounded-2xl border border-white/10 shadow-lg">
             <div className="p-2 bg-neon-blue/10 rounded-lg"><Clock className="w-5 h-5 text-neon-blue" /></div>
             <span className="font-semibold tracking-wide">24/7 Automated</span>
           </motion.div>
@@ -92,7 +100,7 @@ export default function Shop() {
             placeholder="Search premium assets..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-neon-blue/50 focus:border-transparent backdrop-blur-xl transition-all shadow-[0_8px_30px_rgb(0,0,0,0.12)]"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-neon-blue/50 focus:border-transparent transition-all shadow-lg"
           />
         </div>
         <div className="flex items-center gap-4">
@@ -123,7 +131,7 @@ export default function Shop() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05, duration: 0.5, ease: "easeOut" }}
               whileHover={{ y: -8 }}
-              className="group relative bg-white/[0.02] backdrop-blur-2xl rounded-3xl overflow-hidden border border-white/[0.05] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_20px_40px_rgba(0,243,255,0.1)]"
+              className="group relative bg-[#0c0c0e] rounded-3xl overflow-hidden border border-white/[0.05] hover:border-white/[0.15] transition-all duration-300 shadow-xl hover:shadow-2xl"
             >
               {/* Glow effect behind card on hover */}
               <div className="absolute inset-0 bg-gradient-to-b from-neon-blue/0 to-neon-blue/0 group-hover:from-neon-blue/5 group-hover:to-transparent transition-colors duration-500 z-0"></div>
@@ -144,7 +152,7 @@ export default function Shop() {
                 
                 {/* Badges */}
                 <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
-                  <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold border border-white/10 shadow-xl">
+                  <div className="bg-black/80 px-3 py-1.5 rounded-full text-xs font-bold border border-white/10 shadow-lg">
                     <span className={product.stock > 0 ? 'text-neon-green' : 'text-neon-red'}>
                       {product.stock > 0 ? `${product.stock} in stock` : 'Sold Out'}
                     </span>
@@ -152,7 +160,7 @@ export default function Shop() {
                 </div>
                 
                 {product.type === 'activated_email' && (
-                  <div className="absolute top-4 left-4 bg-neon-purple/20 text-neon-purple backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold border border-neon-purple/30 shadow-xl">
+                  <div className="absolute top-4 left-4 bg-neon-purple/20 text-neon-purple px-3 py-1.5 rounded-full text-xs font-bold border border-neon-purple/30 shadow-lg">
                     Auto-Delivery
                   </div>
                 )}

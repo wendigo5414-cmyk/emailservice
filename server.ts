@@ -430,7 +430,7 @@ async function startServer() {
         otp = keywordMatch[1] || keywordMatch[2];
       }
 
-      const finalStatus = currentMode === 'ADMIN' ? 'admin' : 'pending';
+      const finalStatus = String(currentMode).toUpperCase() === 'ADMIN' ? 'admin' : 'pending';
 
       const newEmail = new Email({
         otp,

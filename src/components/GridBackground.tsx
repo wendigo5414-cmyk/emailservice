@@ -6,7 +6,7 @@ export default function GridBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on base
     if (!ctx) return;
 
     let animationFrameId: number;
@@ -20,27 +20,27 @@ export default function GridBackground() {
 
     const initStars = () => {
       stars = [];
-      const numStars = Math.floor((canvas.width * canvas.height) / 1000); // More density
+      // Reduce density for better performance on mobile
+      const numStars = Math.floor((canvas.width * canvas.height) / 3000); 
       for (let i = 0; i < numStars; i++) {
         const rand = Math.random();
         let type: 'small' | 'medium' | 'large' = 'small';
-        let radius = Math.random() * 1 + 0.5; // Slightly larger base
+        let radius = Math.random() * 1 + 0.5;
         
-        // Random floating velocity
-        let vx = (Math.random() - 0.5) * 0.3;
-        let vy = (Math.random() - 0.5) * 0.3 - 0.1; // Slight upward bias
+        let vx = (Math.random() - 0.5) * 0.2;
+        let vy = (Math.random() - 0.5) * 0.2 - 0.05;
 
-        if (rand > 0.7) {
+        if (rand > 0.8) {
           type = 'medium';
-          radius = Math.random() * 1.5 + 1.2;
-          vx = (Math.random() - 0.5) * 0.5;
-          vy = (Math.random() - 0.5) * 0.5 - 0.2;
+          radius = Math.random() * 1.5 + 1.0;
+          vx = (Math.random() - 0.5) * 0.3;
+          vy = (Math.random() - 0.5) * 0.3 - 0.1;
         }
-        if (rand > 0.92) {
+        if (rand > 0.95) {
           type = 'large';
-          radius = Math.random() * 2.5 + 2;
-          vx = (Math.random() - 0.5) * 0.7;
-          vy = (Math.random() - 0.5) * 0.7 - 0.3;
+          radius = Math.random() * 2.0 + 1.5;
+          vx = (Math.random() - 0.5) * 0.4;
+          vy = (Math.random() - 0.5) * 0.4 - 0.15;
         }
 
         stars.push({
@@ -56,59 +56,26 @@ export default function GridBackground() {
     };
 
     const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw premium deep space background with subtle nebulas
-      const bgGradient = ctx.createRadialGradient(
-        canvas.width * 0.5, canvas.height * 0.5, 0,
-        canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.8
-      );
-      bgGradient.addColorStop(0, '#0a0514'); // Deep purple-black center
-      bgGradient.addColorStop(0.5, '#05030a'); // Darker
-      bgGradient.addColorStop(1, '#020104'); // Pitch black edges
-      ctx.fillStyle = bgGradient;
+      // Simple solid fill is much faster than gradients every frame
+      ctx.fillStyle = '#030712'; // Base dark color
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw subtle glowing orbs (nebulas)
-      const drawNebula = (x: number, y: number, r: number, color: string) => {
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, color);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.fillRect(x - r, y - r, r * 2, r * 2);
-      };
-
-      // Neon Purple Nebula
-      drawNebula(canvas.width * 0.2, canvas.height * 0.3, canvas.width * 0.4, 'rgba(188, 19, 254, 0.04)');
-      // Neon Blue Nebula
-      drawNebula(canvas.width * 0.8, canvas.height * 0.7, canvas.width * 0.4, 'rgba(0, 243, 255, 0.04)');
-      // Neon Red/Orange Nebula
-      drawNebula(canvas.width * 0.5, canvas.height * 0.9, canvas.width * 0.5, 'rgba(255, 0, 60, 0.03)');
-
-      // Draw and update stars
+      // Draw and update stars without expensive shadowBlur
       stars.forEach(star => {
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
         
-        // Add glow to stars
         if (star.type === 'large') {
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = '#ffffff';
           ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
         } else if (star.type === 'medium') {
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#00f3ff';
           ctx.fillStyle = `rgba(200, 240, 255, ${star.alpha})`;
         } else {
-          ctx.shadowBlur = 5;
-          ctx.shadowColor = '#bc13fe';
           ctx.fillStyle = `rgba(240, 200, 255, ${star.alpha})`;
         }
 
         ctx.fill();
-        ctx.shadowBlur = 0; // Reset shadow
 
-        // Move star (floating effect)
+        // Move star
         star.x += star.vx;
         star.y += star.vy;
         
@@ -118,7 +85,7 @@ export default function GridBackground() {
         if (star.x < -20) star.x = canvas.width + 20;
         if (star.x > canvas.width + 20) star.x = -20;
 
-        // Twinkle effect
+        // Twinkle effect (simplified)
         star.alpha += (Math.random() - 0.5) * 0.05;
         if (star.alpha < 0.2) star.alpha = 0.2;
         if (star.alpha > 1) star.alpha = 1;
@@ -138,9 +105,17 @@ export default function GridBackground() {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 z-[-1] pointer-events-none"
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 z-[-2] pointer-events-none"
+      />
+      {/* Use CSS for nebulas instead of Canvas for GPU acceleration */}
+      <div className="fixed inset-0 z-[-1] pointer-events-none opacity-40">
+        <div className="absolute top-[30%] left-[20%] w-[40vw] h-[40vw] bg-neon-purple/10 rounded-full blur-[100px] mix-blend-screen transform-gpu"></div>
+        <div className="absolute top-[70%] left-[80%] w-[40vw] h-[40vw] bg-neon-blue/10 rounded-full blur-[100px] mix-blend-screen transform-gpu"></div>
+        <div className="absolute top-[90%] left-[50%] w-[50vw] h-[50vw] bg-neon-red/5 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
+      </div>
+    </>
   );
 }

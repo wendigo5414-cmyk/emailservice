@@ -45,15 +45,27 @@ export default function AdminDashboard() {
   };
 
   const handleModeChange = async (newMode: string) => {
+    const previousConfig = [...config];
+    const newConfig = [...config];
+    const modeIndex = newConfig.findIndex(c => c.key === 'emailMode');
+    if (modeIndex >= 0) {
+      newConfig[modeIndex] = { ...newConfig[modeIndex], value: newMode };
+    } else {
+      newConfig.push({ key: 'emailMode', value: newMode });
+    }
+    setConfig(newConfig);
+
     try {
-      await fetch('/api/admin/config', {
+      const res = await fetch('/api/admin/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ key: 'emailMode', value: newMode })
       });
+      if (!res.ok) throw new Error('Failed');
       fetchData();
     } catch (err) {
       console.error(err);
+      setConfig(previousConfig);
     }
   };
 
@@ -83,14 +95,18 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteEmail = async (id: string) => {
+    const previousEmails = [...emails];
+    setEmails(emails.filter(e => e._id !== id));
     try {
-      await fetch(`/api/admin/emails/${id}`, {
+      const res = await fetch(`/api/admin/emails/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed');
       fetchData();
     } catch (err) {
       console.error(err);
+      setEmails(previousEmails);
     }
   };
 
@@ -222,7 +238,7 @@ export default function AdminDashboard() {
 
         {activeTab === 'emails' && (
           <div>
-            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox (Mode: ADMIN)</h2>
+            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox (Unsold & Stock Emails)</h2>
             <div className="space-y-4">
               {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No admin emails found.</p> : emails.map(e => (
                 <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">

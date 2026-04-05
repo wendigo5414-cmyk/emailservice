@@ -88,7 +88,11 @@ export default function UserDashboard() {
         lastEmailIdRef.current = latestId;
       }
 
-      setEmails(data);
+      setEmails(prev => {
+        // Only update if data actually changed to prevent unnecessary re-renders
+        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        return data;
+      });
       setError(null);
     } catch (err) {
       if (isInitial) {
@@ -122,22 +126,41 @@ export default function UserDashboard() {
 
   const deleteEmail = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const previousEmails = [...emails];
+    const previousSelected = selectedEmail;
+    
+    setEmails(emails.filter(email => email._id !== id));
+    if (selectedEmail?._id === id) {
+      setSelectedEmail(null);
+    }
+
     try {
       const endpoint = user?.isAdmin ? `/api/admin/emails/${id}` : `/api/my-emails/${id}`;
-      await fetch(endpoint, { 
+      const res = await fetch(endpoint, { 
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      setEmails(emails.filter(email => email._id !== id));
-      if (selectedEmail?._id === id) {
-        setSelectedEmail(null);
-      }
+      if (!res.ok) throw new Error('Failed');
     } catch (err) {
       console.error('Failed to delete email', err);
+      setEmails(previousEmails);
+      setSelectedEmail(previousSelected);
     }
   };
 
   const assignEmail = async (emailId: string, userId: string) => {
+    const previousEmails = [...emails];
+    const previousSelected = selectedEmail;
+    
+    const emailToUpdate = emails.find(e => e._id === emailId);
+    if (emailToUpdate) {
+      const updatedEmailOptimistic = { ...emailToUpdate, assignedTo: userId || null };
+      setEmails(emails.map(e => e._id === emailId ? updatedEmailOptimistic : e));
+      if (selectedEmail?._id === emailId) {
+        setSelectedEmail(updatedEmailOptimistic);
+      }
+    }
+
     try {
       const res = await fetch(`/api/admin/emails/${emailId}/assign`, {
         method: 'POST',
@@ -147,30 +170,38 @@ export default function UserDashboard() {
         },
         body: JSON.stringify({ userId })
       });
-      if (res.ok) {
-        const updatedEmail = await res.json();
-        setEmails(emails.map(e => e._id === emailId ? updatedEmail : e));
-        if (selectedEmail?._id === emailId) {
-          setSelectedEmail(updatedEmail);
-        }
+      if (!res.ok) throw new Error('Failed');
+      const updatedEmail = await res.json();
+      setEmails(prev => prev.map(e => e._id === emailId ? updatedEmail : e));
+      if (selectedEmail?._id === emailId) {
+        setSelectedEmail(updatedEmail);
       }
     } catch (err) {
       console.error('Failed to assign email', err);
+      setEmails(previousEmails);
+      setSelectedEmail(previousSelected);
     }
   };
 
   const clearAll = async () => {
+    const previousEmails = [...emails];
+    const previousSelected = selectedEmail;
+    
+    setEmails([]);
+    setSelectedEmail(null);
+
     try {
       if (user?.isAdmin) {
-        await fetch('/api/admin/emails', { 
+        const res = await fetch('/api/admin/emails', { 
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (!res.ok) throw new Error('Failed');
       }
-      setEmails([]);
-      setSelectedEmail(null);
     } catch (err) {
       console.error('Failed to clear emails', err);
+      setEmails(previousEmails);
+      setSelectedEmail(previousSelected);
     }
   };
 
@@ -192,66 +223,66 @@ export default function UserDashboard() {
 
   if (liveMode) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white p-4 relative">
+      <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center text-zinc-100 p-4 relative antialiased selection:bg-emerald-500/30">
         <button
           onClick={() => setLiveMode(false)}
-          className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
+          className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-full transition-all duration-200 active:scale-95"
         >
-          <Power className="w-4 h-4 text-red-400" />
-          <span className="text-sm font-medium">Exit Live Mode</span>
+          <Power className="w-4 h-4 text-red-500" />
+          <span className="text-sm font-medium text-zinc-300">Exit Live Mode</span>
         </button>
 
         {!latestEmail ? (
           <div className="flex flex-col items-center text-zinc-500">
-            <RefreshCw className="w-12 h-12 animate-spin mb-4 opacity-20" />
-            <p className="text-xl font-medium">Waiting for incoming emails...</p>
+            <RefreshCw className="w-10 h-10 animate-spin mb-6 opacity-20" />
+            <p className="text-lg font-medium tracking-tight">Waiting for incoming emails...</p>
           </div>
         ) : latestEmail.otp ? (
-          <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
-            <div className="text-zinc-500 mb-4 text-sm uppercase tracking-widest font-semibold flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+          <div className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+            <div className="text-emerald-500/80 mb-6 text-xs uppercase tracking-[0.2em] font-bold flex items-center gap-3 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 transform-gpu"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               Latest OTP Received
             </div>
-            <div className="text-[8rem] sm:text-[12rem] font-mono font-bold leading-none tracking-tighter text-white mb-8 drop-shadow-2xl">
+            <div className="text-[7rem] sm:text-[11rem] font-mono font-bold leading-none tracking-tighter text-white mb-10">
               {latestEmail.otp}
             </div>
             
-            <div className="flex flex-col items-center gap-6">
+            <div className="flex flex-col items-center gap-8">
               <button
                 onClick={() => handleCopy(latestEmail.otp!)}
                 className={cn(
-                  "flex items-center gap-3 px-8 py-4 rounded-full text-xl font-medium transition-all duration-300",
+                  "flex items-center gap-3 px-8 py-4 rounded-full text-lg font-semibold transition-all duration-200 active:scale-95",
                   copied 
-                    ? "bg-green-500/20 text-green-400 border border-green-500/50" 
+                    ? "bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]" 
                     : "bg-white text-black hover:bg-zinc-200"
                 )}
               >
                 {copied ? <CheckCircle2 className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
-                {copied ? "Copied!" : "Copy OTP"}
+                {copied ? "Copied to Clipboard" : "Copy OTP"}
               </button>
               
-              <div className="flex items-center gap-4 text-zinc-400 text-sm">
-                <span>For: <span className="text-zinc-300 font-medium">{latestEmail.recipientAlias}</span></span>
-                <span>•</span>
+              <div className="flex items-center gap-3 text-zinc-500 text-sm font-medium">
+                <span>For: <span className="text-zinc-300">{latestEmail.recipientAlias}</span></span>
+                <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
                 <span>Received {formatDistanceToNow(new Date(latestEmail.receivedAt || latestEmail.timestamp))} ago</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
-            <div className="text-zinc-500 mb-4 text-sm uppercase tracking-widest font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-500" />
+          <div className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+            <div className="text-amber-500/80 mb-6 text-xs uppercase tracking-[0.2em] font-bold flex items-center gap-3 bg-amber-500/10 px-4 py-2 rounded-full border border-amber-500/20">
+              <AlertCircle className="w-4 h-4 text-amber-500" />
               Latest Email Status
             </div>
-            <div className="text-4xl sm:text-6xl font-mono font-bold leading-none tracking-tighter text-zinc-400 mb-8 drop-shadow-2xl">
+            <div className="text-5xl sm:text-7xl font-mono font-bold leading-none tracking-tighter text-zinc-700 mb-10">
               NO OTP
             </div>
-            <div className="flex items-center gap-4 text-zinc-500 text-sm">
-              <span>From: <span className="text-zinc-400 font-medium">{getSenderName(latestEmail.from)}</span></span>
-              <span>•</span>
+            <div className="flex items-center gap-3 text-zinc-500 text-sm font-medium">
+              <span>From: <span className="text-zinc-400">{getSenderName(latestEmail.from)}</span></span>
+              <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
               <span>Received {formatDistanceToNow(new Date(latestEmail.receivedAt || latestEmail.timestamp))} ago</span>
             </div>
           </div>
@@ -261,58 +292,58 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-zinc-800 relative">
+    <div className="min-h-screen bg-[#FAFAFA] flex flex-col md:flex-row font-sans text-zinc-900 relative antialiased selection:bg-blue-200">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm z-40 transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col transform transition-transform duration-300 ease-in-out shrink-0",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-[#F4F4F5] border-r border-zinc-200/80 flex flex-col transform transition-transform duration-300 ease-in-out shrink-0 shadow-2xl md:shadow-none",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full",
         "md:translate-x-0 md:static"
       )}>
-        <div className="p-4 border-b border-zinc-200 flex items-center justify-between gap-3">
+        <div className="p-5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 bg-black rounded-xl flex items-center justify-center shrink-0 shadow-sm">
               <Mail className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-semibold text-zinc-900 tracking-tight">Mailbox</h1>
+            <h1 className="text-lg font-bold text-zinc-900 tracking-tight">Mailbox</h1>
           </div>
           <button 
-            className="p-1 text-zinc-500 hover:bg-zinc-200 rounded md:hidden"
+            className="p-2 text-zinc-500 hover:bg-zinc-200/80 rounded-lg md:hidden transition-colors"
             onClick={() => setIsSidebarOpen(false)}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-100/50 flex items-center gap-2 text-xs font-medium">
-          <Database className="w-3.5 h-3.5 text-zinc-500" />
-          <span className="text-zinc-600">Database:</span>
+        <div className="px-5 py-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+          <Database className="w-3.5 h-3.5 text-zinc-400" />
+          <span className="text-zinc-500">Database</span>
           {error ? (
-            <span className="text-red-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Disconnected</span>
+            <span className="ml-auto text-red-600 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span> Disconnected</span>
           ) : (
-            <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Connected</span>
+            <span className="ml-auto text-emerald-600 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span> Connected</span>
           )}
         </div>
         
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1.5 mt-2">
           <button
             onClick={() => { setActiveTab('inbox'); setSelectedEmail(null); setIsSidebarOpen(false); }}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-              activeTab === 'inbox' ? "bg-blue-100/50 text-blue-700" : "text-zinc-600 hover:bg-zinc-200/50"
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeTab === 'inbox' ? "bg-white text-black shadow-sm border border-zinc-200/60" : "text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 border border-transparent"
             )}
           >
             <Mail className="w-4 h-4" />
             Inbox
             {emails.length > 0 && (
-              <span className="ml-auto bg-blue-600 text-white py-0.5 px-2 rounded-full text-xs font-bold">
+              <span className="ml-auto bg-black text-white py-0.5 px-2.5 rounded-full text-xs font-bold shadow-sm">
                 {emails.length}
               </span>
             )}
@@ -321,8 +352,8 @@ export default function UserDashboard() {
           <button
             onClick={() => { setActiveTab('trash'); setSelectedEmail(null); setIsSidebarOpen(false); }}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-              activeTab === 'trash' ? "bg-red-50 text-red-700" : "text-zinc-600 hover:bg-zinc-200/50"
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeTab === 'trash' ? "bg-white text-red-600 shadow-sm border border-zinc-200/60" : "text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 border border-transparent"
             )}
           >
             <Trash2 className="w-4 h-4" />
@@ -333,8 +364,8 @@ export default function UserDashboard() {
             <button
               onClick={() => { setActiveTab('settings'); setSelectedEmail(null); setIsSidebarOpen(false); }}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                activeTab === 'settings' ? "bg-zinc-200/50 text-zinc-900" : "text-zinc-600 hover:bg-zinc-200/50"
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                activeTab === 'settings' ? "bg-white text-black shadow-sm border border-zinc-200/60" : "text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 border border-transparent"
               )}
             >
               <Settings className="w-4 h-4" />
@@ -343,243 +374,257 @@ export default function UserDashboard() {
           )}
         </nav>
 
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-2.5">
           <button
             onClick={() => navigate('/')}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-md text-sm font-medium transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-200/50 hover:bg-zinc-200 text-zinc-800 rounded-lg text-sm font-semibold transition-all duration-200 active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </button>
           <button
             onClick={() => setLiveMode(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-md text-sm font-medium transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-black hover:bg-zinc-800 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg active:scale-95"
           >
-            <Power className="w-4 h-4 text-green-400" />
+            <Power className="w-4 h-4 text-emerald-400" />
             Live OTP Mode
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white w-full">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#FAFAFA] w-full">
         {/* Header */}
-        <header className="bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="bg-white border-b border-zinc-200/80 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-10">
+          <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-md transition-colors md:hidden"
+              className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors md:hidden"
             >
               <Menu className="w-5 h-5" />
             </button>
             {selectedEmail && (
               <button 
                 onClick={() => setSelectedEmail(null)}
-                className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-full transition-colors"
+                className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-all active:scale-95"
                 title="Back to inbox"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
             )}
-            <h2 className="text-base font-semibold text-zinc-800 capitalize">
+            <h2 className="text-lg font-bold text-zinc-900 capitalize tracking-tight">
               {selectedEmail ? 'Read Email' : activeTab}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => fetchEmails(true)}
-              className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-full transition-colors"
+              className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-all active:scale-95"
               title="Refresh"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
             </button>
             {selectedEmail && (
               <button
                 onClick={(e) => deleteEmail(selectedEmail._id, e)}
-                className="p-1.5 text-zinc-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                className="p-2 text-zinc-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all active:scale-95"
                 title="Delete"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-5 h-5" />
               </button>
             )}
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto">
-          {error && (
-            <div className="m-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-800">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold">Connection Error</h3>
-                <p className="text-sm mt-1 opacity-90">{error}</p>
+        <div className="flex-1 overflow-auto p-4 md:p-6">
+          <div className="max-w-5xl mx-auto h-full">
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 shadow-sm animate-in fade-in slide-in-from-top-2">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
+                <div>
+                  <h3 className="font-bold">Connection Error</h3>
+                  <p className="text-sm mt-1 opacity-90">{error}</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Full Email View */}
-          {selectedEmail ? (
-            <div className="p-6 max-w-4xl mx-auto animate-in fade-in duration-200">
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-normal text-zinc-900">
-                  {selectedEmail.subject || '(No Subject)'}
-                </h1>
+            {/* Full Email View */}
+            {selectedEmail ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-zinc-200/80 p-6 md:p-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                  <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight leading-tight">
+                    {selectedEmail.subject || '(No Subject)'}
+                  </h1>
+                  
+                  {/* Admin Assignment Controls */}
+                  {user?.isAdmin && (
+                    <div className="flex items-center gap-3 bg-zinc-50 px-4 py-2.5 rounded-xl border border-zinc-200/80 shrink-0">
+                      <span className="text-sm font-semibold text-zinc-600 uppercase tracking-wider">Assign:</span>
+                      <select 
+                        className="text-sm font-medium bg-white border border-zinc-200 rounded-lg py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-black focus:border-black outline-none transition-all cursor-pointer"
+                        value={selectedEmail.assignedTo || ''}
+                        onChange={(e) => assignEmail(selectedEmail._id, e.target.value)}
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map(u => (
+                          <option key={u._id} value={u._id}>{u.username} ({u.email})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
                 
-                {/* Admin Assignment Controls */}
-                {user?.isAdmin && (
-                  <div className="flex items-center gap-2 bg-zinc-50 p-2 rounded-lg border border-zinc-200">
-                    <span className="text-sm font-medium text-zinc-600">Assign to:</span>
-                    <select 
-                      className="text-sm border-zinc-300 rounded-md py-1 pl-2 pr-8 focus:ring-blue-500 focus:border-blue-500"
-                      value={selectedEmail.assignedTo || ''}
-                      onChange={(e) => assignEmail(selectedEmail._id, e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {users.map(u => (
-                        <option key={u._id} value={u._id}>{u.username} ({u.email})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex items-start justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-semibold text-lg shrink-0">
-                    {getSenderName(selectedEmail.from).charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-zinc-900">{getSenderName(selectedEmail.from)}</span>
-                      <span className="text-sm text-zinc-500">&lt;{selectedEmail.from}&gt;</span>
+                <div className="flex items-start justify-between mb-10 pb-8 border-b border-zinc-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-zinc-100 text-zinc-600 rounded-full flex items-center justify-center font-bold text-xl shrink-0 border border-zinc-200/80">
+                      {getSenderName(selectedEmail.from).charAt(0).toUpperCase()}
                     </div>
-                    <div className="text-xs text-zinc-500 mt-0.5">
-                      to {selectedEmail.recipientAlias}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-zinc-900 text-lg">{getSenderName(selectedEmail.from)}</span>
+                        <span className="text-sm text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200/50">&lt;{selectedEmail.from}&gt;</span>
+                      </div>
+                      <div className="text-sm text-zinc-500 mt-1 font-medium">
+                        to <span className="text-zinc-700">{selectedEmail.recipientAlias}</span>
+                      </div>
                     </div>
                   </div>
+                  <div className="text-sm font-medium text-zinc-400 whitespace-nowrap bg-zinc-50 px-3 py-1.5 rounded-lg border border-zinc-100">
+                    {format(new Date(selectedEmail.receivedAt || selectedEmail.timestamp), 'MMM d, yyyy, h:mm a')}
+                  </div>
                 </div>
-                <div className="text-sm text-zinc-500 whitespace-nowrap">
-                  {format(new Date(selectedEmail.receivedAt || selectedEmail.timestamp), 'MMM d, yyyy, h:mm a')}
-                </div>
-              </div>
 
-              <div className="prose prose-zinc max-w-none bg-white rounded-lg">
-                {selectedEmail.htmlBody || (selectedEmail.fullBody && selectedEmail.fullBody.trim().startsWith('<')) ? (
-                  <iframe
-                    srcDoc={selectedEmail.htmlBody || selectedEmail.fullBody}
-                    className="w-full min-h-[600px] border-0"
-                    title="Email Content"
-                    sandbox="allow-same-origin allow-popups"
-                  />
-                ) : (
-                  <div className="whitespace-pre-wrap text-sm text-zinc-800 font-sans leading-relaxed">
-                    {selectedEmail.fullBody}
-                  </div>
-                )}
+                <div className="prose prose-zinc max-w-none">
+                  {selectedEmail.htmlBody || (selectedEmail.fullBody && selectedEmail.fullBody.trim().startsWith('<')) ? (
+                    <iframe
+                      srcDoc={selectedEmail.htmlBody || selectedEmail.fullBody}
+                      className="w-full min-h-[600px] border-0 rounded-xl bg-white"
+                      title="Email Content"
+                      sandbox="allow-same-origin allow-popups"
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap text-base text-zinc-800 font-sans leading-relaxed bg-zinc-50/50 p-6 rounded-xl border border-zinc-100">
+                      {selectedEmail.fullBody}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
           ) : (
             /* List View */
             <>
               {activeTab === 'inbox' && (
-                <div className="divide-y divide-zinc-100">
-                  {emails.length === 0 && !loading && !error ? (
-                    <div className="text-center py-20">
-                      <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Mail className="w-8 h-8 text-zinc-300" />
+                <div className="bg-white rounded-2xl shadow-sm border border-zinc-200/80 overflow-hidden">
+                  <div className="divide-y divide-zinc-100">
+                    {emails.length === 0 && !loading && !error ? (
+                      <div className="text-center py-32">
+                        <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-zinc-100">
+                          <Mail className="w-10 h-10 text-zinc-300" />
+                        </div>
+                        <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Your inbox is empty</h3>
+                        <p className="text-zinc-500 mt-2 font-medium">Waiting for incoming emails...</p>
                       </div>
-                      <h3 className="text-lg font-medium text-zinc-900">Your inbox is empty</h3>
-                      <p className="text-zinc-500 mt-1 text-sm">Waiting for incoming emails...</p>
-                    </div>
-                  ) : (
-                    emails.map((email) => (
-                      <div 
-                        key={email._id} 
-                        onClick={() => setSelectedEmail(email)}
-                        className="group flex items-center gap-4 px-4 py-3 hover:bg-zinc-50 hover:shadow-[inset_1px_0_0_#2563eb] cursor-pointer transition-all bg-white"
-                      >
-                        <div className="w-48 shrink-0 flex items-center gap-2 truncate">
-                          <UserCircle2 className="w-5 h-5 text-zinc-400 shrink-0" />
-                          <span className="font-medium text-zinc-900 text-sm truncate">
-                            {getSenderName(email.from)}
-                          </span>
-                        </div>
-                        
-                        <div className="flex-1 min-w-0 flex items-center gap-2 text-sm">
-                          <span className="font-medium text-zinc-900 truncate max-w-[200px]">
-                            {email.subject || '(No Subject)'}
-                          </span>
-                          <span className="text-zinc-400 shrink-0">-</span>
-                          <span className="text-zinc-500 truncate">
-                            {email.fullBody.replace(/\s+/g, ' ').substring(0, 100)}
-                          </span>
-                        </div>
-                        
-                        {user?.isAdmin && (
-                          <div className="w-32 shrink-0 text-xs">
-                            {email.assignedTo ? (
-                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">Assigned</span>
-                            ) : (
-                              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-medium">Unassigned</span>
-                            )}
+                    ) : (
+                      emails.map((email) => (
+                        <div 
+                          key={email._id} 
+                          onClick={() => setSelectedEmail(email)}
+                          className="group flex items-center gap-4 px-6 py-4 hover:bg-[#FAFAFA] cursor-pointer transition-all duration-200 border-l-2 border-transparent hover:border-black"
+                        >
+                          <div className="w-48 shrink-0 flex items-center gap-3 truncate">
+                            <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 border border-zinc-200/80 group-hover:bg-white transition-colors">
+                              <span className="text-xs font-bold text-zinc-600">{getSenderName(email.from).charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span className="font-bold text-zinc-900 text-sm truncate">
+                              {getSenderName(email.from)}
+                            </span>
                           </div>
-                        )}
-                        
-                        <div className="w-24 shrink-0 text-right text-xs font-medium text-zinc-500 group-hover:hidden">
-                          {formatDistanceToNow(new Date(email.receivedAt || email.timestamp), { addSuffix: true })}
-                        </div>
+                          
+                          <div className="flex-1 min-w-0 flex items-center gap-3 text-sm">
+                            <span className="font-bold text-zinc-900 truncate max-w-[250px]">
+                              {email.subject || '(No Subject)'}
+                            </span>
+                            <span className="text-zinc-300 shrink-0 font-bold">-</span>
+                            <span className="text-zinc-500 truncate font-medium">
+                              {email.fullBody.replace(/\s+/g, ' ').substring(0, 120)}
+                            </span>
+                          </div>
+                          
+                          {user?.isAdmin && (
+                            <div className="w-auto shrink-0 text-xs flex gap-2">
+                              {email.status === 'admin' && (
+                                <span className="bg-purple-50 text-purple-700 border border-purple-200/60 px-2.5 py-1 rounded-md font-bold tracking-wide">ADMIN</span>
+                              )}
+                              {email.status === 'pending' && (
+                                <span className="bg-zinc-100 text-zinc-600 border border-zinc-200/60 px-2.5 py-1 rounded-md font-bold tracking-wide">PENDING</span>
+                              )}
+                              {email.status === 'stock' && (
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200/60 px-2.5 py-1 rounded-md font-bold tracking-wide">STOCK</span>
+                              )}
+                              {email.assignedTo ? (
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-1 rounded-md font-bold tracking-wide">Assigned</span>
+                              ) : (
+                                <span className="bg-amber-50 text-amber-700 border border-amber-200/60 px-2.5 py-1 rounded-md font-bold tracking-wide">Unassigned</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div className="w-28 shrink-0 text-right text-xs font-bold text-zinc-400 group-hover:hidden">
+                            {formatDistanceToNow(new Date(email.receivedAt || email.timestamp), { addSuffix: true })}
+                          </div>
 
-                        <div className="w-24 shrink-0 flex justify-end gap-2 hidden group-hover:flex">
-                          <button
-                            onClick={(e) => deleteEmail(email._id, e)}
-                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="w-28 shrink-0 flex justify-end gap-2 hidden group-hover:flex">
+                            <button
+                              onClick={(e) => deleteEmail(email._id, e)}
+                              className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
               {activeTab === 'trash' && (
-                <div className="p-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-zinc-900 font-medium">Deleted Emails</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-zinc-200/80 p-8">
+                  <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Deleted Emails</h3>
                     <button 
                       onClick={clearAll}
-                      className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 hover:bg-red-50 rounded-md transition-colors"
+                      className="text-sm text-red-600 hover:text-red-700 font-bold px-5 py-2.5 hover:bg-red-50 rounded-lg transition-all active:scale-95 border border-transparent hover:border-red-100"
                     >
                       Empty Trash
                     </button>
                   </div>
-                  <div className="text-center py-20 border border-dashed border-zinc-200 rounded-xl bg-zinc-50">
+                  <div className="text-center py-24 border-2 border-dashed border-zinc-100 rounded-2xl bg-[#FAFAFA]">
                     <Trash2 className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
-                    <p className="text-zinc-500 text-sm">Trash is empty</p>
+                    <p className="text-zinc-500 font-medium">Trash is empty</p>
                   </div>
                 </div>
               )}
 
               {activeTab === 'settings' && user?.isAdmin && (
-                <div className="p-8 max-w-3xl mx-auto space-y-8">
-                  <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-base font-semibold text-zinc-900 mb-2">Webhook Configuration</h3>
-                    <p className="text-zinc-500 mb-6 text-sm">
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <div className="bg-white border border-zinc-200/80 rounded-2xl p-8 shadow-sm">
+                    <h3 className="text-lg font-bold text-zinc-900 mb-2 tracking-tight">Webhook Configuration</h3>
+                    <p className="text-zinc-500 mb-8 text-sm font-medium">
                       Configure your Cloudflare Email Worker to forward emails to this endpoint.
                     </p>
                     
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-1">Webhook URL</label>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 block p-2.5 bg-zinc-50 border border-zinc-200 rounded-md text-sm text-zinc-800 font-mono">
+                        <label className="block text-sm font-bold text-zinc-700 mb-2">Webhook URL</label>
+                        <div className="flex items-center gap-3">
+                          <code className="flex-1 block p-3.5 bg-zinc-50 border border-zinc-200/80 rounded-xl text-sm text-zinc-800 font-mono font-medium">
                             {window.location.origin}/webhook/email
                           </code>
                           <button 
                             onClick={() => handleCopy(`${window.location.origin}/webhook/email`)}
-                            className="p-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-md transition-colors"
+                            className="p-3.5 bg-black hover:bg-zinc-800 text-white rounded-xl transition-all active:scale-95 shadow-sm"
                           >
                             <Copy className="w-4 h-4" />
                           </button>
@@ -588,10 +633,10 @@ export default function UserDashboard() {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-base font-semibold text-zinc-900 mb-4">Cloudflare Worker Code</h3>
-                    <div className="relative">
-                      <pre className="p-4 bg-zinc-950 text-zinc-300 rounded-lg text-sm font-mono overflow-x-auto">
+                  <div className="bg-white border border-zinc-200/80 rounded-2xl p-8 shadow-sm">
+                    <h3 className="text-lg font-bold text-zinc-900 mb-6 tracking-tight">Cloudflare Worker Code</h3>
+                    <div className="relative group">
+                      <pre className="p-6 bg-[#09090b] text-zinc-300 rounded-xl text-sm font-mono overflow-x-auto border border-zinc-800 shadow-inner">
 {`export default {
   async email(message, env, ctx) {
     const rawEmail = await new Response(message.raw).text();
@@ -636,7 +681,7 @@ export default function UserDashboard() {
     });
   }
 }`)}
-                        className="absolute top-4 right-4 p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+                        className="absolute top-4 right-4 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm active:scale-95"
                       >
                         <Copy className="w-4 h-4" />
                       </button>
@@ -646,6 +691,7 @@ export default function UserDashboard() {
               )}
             </>
           )}
+        </div>
         </div>
       </main>
     </div>
