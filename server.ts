@@ -329,13 +329,27 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/admin/emails/:id', authenticateToken, isAdmin, async (req, res) => {
+    try {
+      await Email.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
   // --- Webhook Route (Email Receiver) ---
   app.post('/api/webhook/email', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const expectedAuth = `Bearer ${process.env.API_SECRET_KEY || 'YOUR_API_SECRET_KEY_HERE'}`;
+      const xAuthKey = req.headers['x-auth-key'];
+      const expectedAuth = process.env.API_SECRET_KEY || 'keyxxx';
       
-      if (authHeader !== expectedAuth) {
+      const isAuthorized = 
+        (authHeader && authHeader === `Bearer ${expectedAuth}`) || 
+        (xAuthKey && xAuthKey === expectedAuth);
+
+      if (!isAuthorized) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
