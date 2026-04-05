@@ -82,6 +82,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteEmail = async (id: string) => {
+    try {
+      await fetch(`/api/admin/emails/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const currentMode = Array.isArray(config) ? (config.find(c => c.key === 'emailMode')?.value || 'STOCKING') : 'STOCKING';
 
   return (
@@ -216,9 +228,12 @@ export default function AdminDashboard() {
                 <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-bold text-white">{e.subject || 'No Subject'}</div>
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
-                      {e.status.toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
+                        {e.status.toUpperCase()}
+                      </span>
+                      <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium">Delete</button>
+                    </div>
                   </div>
                   <div className="text-sm text-gray-400 mb-2">From: {e.from} | To: {e.recipientAlias}</div>
                   <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
