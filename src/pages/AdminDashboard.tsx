@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '../store/auth';https://github.com/wendigo5414-cmyk/emailservice/blob/main/src/pages/AdminDashboard.tsx
+import { useAuthStore } from '../store/auth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { Settings, Package, ShoppingBag, Mail, ShieldAlert } from 'lucide-react';
 
