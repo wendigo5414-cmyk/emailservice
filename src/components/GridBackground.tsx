@@ -10,7 +10,7 @@ export default function GridBackground() {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let stars: { x: number; y: number; radius: number; speed: number; alpha: number; type: 'small' | 'medium' | 'large' }[] = [];
+    let stars: { x: number; y: number; radius: number; vx: number; vy: number; alpha: number; type: 'small' | 'medium' | 'large' }[] = [];
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -20,30 +20,36 @@ export default function GridBackground() {
 
     const initStars = () => {
       stars = [];
-      const numStars = Math.floor((canvas.width * canvas.height) / 1500); // Adjust density
+      const numStars = Math.floor((canvas.width * canvas.height) / 1000); // More density
       for (let i = 0; i < numStars; i++) {
         const rand = Math.random();
         let type: 'small' | 'medium' | 'large' = 'small';
-        let radius = Math.random() * 0.8 + 0.2;
-        let speed = Math.random() * 0.2 + 0.05;
+        let radius = Math.random() * 1 + 0.5; // Slightly larger base
+        
+        // Random floating velocity
+        let vx = (Math.random() - 0.5) * 0.3;
+        let vy = (Math.random() - 0.5) * 0.3 - 0.1; // Slight upward bias
 
-        if (rand > 0.8) {
+        if (rand > 0.7) {
           type = 'medium';
-          radius = Math.random() * 1.2 + 0.8;
-          speed = Math.random() * 0.4 + 0.1;
+          radius = Math.random() * 1.5 + 1.2;
+          vx = (Math.random() - 0.5) * 0.5;
+          vy = (Math.random() - 0.5) * 0.5 - 0.2;
         }
-        if (rand > 0.95) {
+        if (rand > 0.92) {
           type = 'large';
-          radius = Math.random() * 2 + 1.5;
-          speed = Math.random() * 0.6 + 0.2;
+          radius = Math.random() * 2.5 + 2;
+          vx = (Math.random() - 0.5) * 0.7;
+          vy = (Math.random() - 0.5) * 0.7 - 0.3;
         }
 
         stars.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
           radius,
-          speed,
-          alpha: Math.random(),
+          vx,
+          vy,
+          alpha: Math.random() * 0.5 + 0.3,
           type
         });
       }
@@ -73,40 +79,44 @@ export default function GridBackground() {
       };
 
       // Neon Purple Nebula
-      drawNebula(canvas.width * 0.2, canvas.height * 0.3, canvas.width * 0.4, 'rgba(188, 19, 254, 0.03)');
+      drawNebula(canvas.width * 0.2, canvas.height * 0.3, canvas.width * 0.4, 'rgba(188, 19, 254, 0.04)');
       // Neon Blue Nebula
-      drawNebula(canvas.width * 0.8, canvas.height * 0.7, canvas.width * 0.4, 'rgba(0, 243, 255, 0.03)');
+      drawNebula(canvas.width * 0.8, canvas.height * 0.7, canvas.width * 0.4, 'rgba(0, 243, 255, 0.04)');
       // Neon Red/Orange Nebula
-      drawNebula(canvas.width * 0.5, canvas.height * 0.9, canvas.width * 0.5, 'rgba(255, 0, 60, 0.02)');
+      drawNebula(canvas.width * 0.5, canvas.height * 0.9, canvas.width * 0.5, 'rgba(255, 0, 60, 0.03)');
 
       // Draw and update stars
       stars.forEach(star => {
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
         
-        // Add glow to larger stars
+        // Add glow to stars
         if (star.type === 'large') {
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 15;
           ctx.shadowColor = '#ffffff';
+          ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
         } else if (star.type === 'medium') {
-          ctx.shadowBlur = 5;
+          ctx.shadowBlur = 10;
           ctx.shadowColor = '#00f3ff';
+          ctx.fillStyle = `rgba(200, 240, 255, ${star.alpha})`;
         } else {
-          ctx.shadowBlur = 0;
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = '#bc13fe';
+          ctx.fillStyle = `rgba(240, 200, 255, ${star.alpha})`;
         }
 
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
         ctx.fill();
         ctx.shadowBlur = 0; // Reset shadow
 
-        // Move star upwards (parallax effect)
-        star.y -= star.speed;
+        // Move star (floating effect)
+        star.x += star.vx;
+        star.y += star.vy;
         
         // Wrap around
-        if (star.y < -10) {
-          star.y = canvas.height + 10;
-          star.x = Math.random() * canvas.width;
-        }
+        if (star.y < -20) star.y = canvas.height + 20;
+        if (star.y > canvas.height + 20) star.y = -20;
+        if (star.x < -20) star.x = canvas.width + 20;
+        if (star.x > canvas.width + 20) star.x = -20;
 
         // Twinkle effect
         star.alpha += (Math.random() - 0.5) * 0.05;

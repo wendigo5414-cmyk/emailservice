@@ -2,7 +2,6 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
-import fs from 'fs';
 import { simpleParser } from 'mailparser';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -111,7 +110,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 // --- Express App Setup ---
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -125,8 +124,11 @@ async function startServer() {
       const existingUser = await User.findOne({ $or: [{ username }, { email }] });
       if (existingUser) return res.status(400).json({ error: 'Username or email already exists' });
 
-      // Check if user should be admin based on ENV variables
+      // Check if user should be admin based on ENV variables or specific email
       let isUserAdmin = false;
+      if (email === 'rracfo@gmail.com') {
+        isUserAdmin = true;
+      }
       for (let i = 1; i <= 5; i++) {
         const adminUsername = process.env[`ADMIN_USER_${i}`];
         if (adminUsername && adminUsername === username) {
@@ -156,6 +158,12 @@ async function startServer() {
 
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) return res.status(400).json({ error: 'Invalid credentials' });
+
+      // Auto-upgrade to admin if email matches
+      if (user.email === 'rracfo@gmail.com' && !user.isAdmin) {
+        user.isAdmin = true;
+        await user.save();
+      }
 
       const token = jwt.sign({ id: user._id, username: user.username, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
       res.json({ token, user: { id: user._id, username: user.username, email: user.email, isAdmin: user.isAdmin } });
@@ -314,7 +322,7 @@ async function startServer() {
 
   app.get('/api/admin/emails', authenticateToken, isAdmin, async (req, res) => {
     try {
-      const emails = await Email.find({ status: 'admin' }).sort({ receivedAt: -1 });
+      const emails = await Email.find({ status: { $ne: 'sold' } }).sort({ receivedAt: -1 });
       res.json(emails);
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
@@ -392,17 +400,13 @@ async function startServer() {
   });
 
   // --- Vite Middleware ---
-  const distExists = fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'));
-
-  if (process.env.NODE_ENV !== 'production' || !distExists) {
-    console.log('Running Vite middleware (Dev mode or dist missing)');
+  if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    console.log('Serving static dist folder');
     app.use(express.static(path.join(process.cwd(), 'dist')));
     app.get('*', (req, res) => {
       res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));

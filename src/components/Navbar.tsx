@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, LogOut, ShieldAlert, Package } from 'lucide-react';
+import { ShoppingCart, User, LogOut, ShieldAlert, Package, Mail } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useCartStore } from '../store/cart';
 
@@ -39,16 +39,17 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-4">
-                {user.isAdmin && (
+                {user.isAdmin ? (
                   <Link to="/admin" className="text-neon-orange hover:text-white transition-colors flex items-center gap-1 hover:scale-105 transform duration-200">
                     <ShieldAlert className="w-5 h-5" />
                     <span className="hidden sm:inline text-sm font-medium">Admin</span>
                   </Link>
+                ) : (
+                  <Link to="/emails" className="text-neon-green hover:text-white transition-colors flex items-center gap-1 hover:scale-105 transform duration-200">
+                    <Mail className="w-5 h-5" />
+                    <span className="hidden sm:inline text-sm font-medium">Emails</span>
+                  </Link>
                 )}
-                <Link to="/emails" className="text-neon-green hover:text-white transition-colors flex items-center gap-1 hover:scale-105 transform duration-200">
-                  <Package className="w-5 h-5" />
-                  <span className="hidden sm:inline text-sm font-medium">My Items</span>
-                </Link>
                 <button onClick={handleLogout} className="text-gray-400 hover:text-neon-red transition-colors hover:scale-110 transform duration-200">
                   <LogOut className="w-5 h-5" />
                 </button>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/auth';
-import { Package, Copy, CheckCircle2 } from 'lucide-react';
+import { Mail, Copy, CheckCircle2 } from 'lucide-react';
 
 export default function UserDashboard() {
   const { token } = useAuthStore();
@@ -43,7 +43,7 @@ export default function UserDashboard() {
 
   return (
     <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
-      <h1 className="text-3xl font-bold mb-8 text-white border-b border-white/10 pb-4">My Items</h1>
+      <h1 className="text-3xl font-bold mb-8 text-white border-b border-white/10 pb-4">Your Owned Emails</h1>
 
       {loading ? (
         <div className="flex justify-center py-20">
@@ -51,9 +51,9 @@ export default function UserDashboard() {
         </div>
       ) : emails.length === 0 ? (
         <div className="text-center py-20 glass-panel">
-          <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-300">No items yet</h2>
-          <p className="text-gray-500 mt-2">Your purchased items will appear here.</p>
+          <Mail className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-300">No Emails</h2>
+          <p className="text-gray-500 mt-2">Your purchased emails will appear here.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

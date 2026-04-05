@@ -82,7 +82,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const currentMode = config.find(c => c.key === 'emailMode')?.value || 'STOCKING';
+  const currentMode = Array.isArray(config) ? (config.find(c => c.key === 'emailMode')?.value || 'STOCKING') : 'STOCKING';
 
   return (
     <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map(p => (
+                  {Array.isArray(products) && products.map(p => (
                     <tr key={p._id} className="border-b border-white/5">
                       <td className="p-3">{p.name}</td>
                       <td className="p-3">{p.type}</td>
@@ -190,7 +190,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map(o => (
+                  {Array.isArray(orders) && orders.map(o => (
                     <tr key={o._id} className="border-b border-white/5">
                       <td className="p-3 font-mono text-xs">{o._id}</td>
                       <td className="p-3">{o.userId?.username || 'Unknown'}</td>
@@ -210,11 +210,16 @@ export default function AdminDashboard() {
 
         {activeTab === 'emails' && (
           <div>
-            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox (Mode: ADMIN)</h2>
+            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox (Unsold & Stock Emails)</h2>
             <div className="space-y-4">
-              {emails.length === 0 ? <p className="text-gray-500">No admin emails found.</p> : emails.map(e => (
+              {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No admin emails found.</p> : emails.map(e => (
                 <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
-                  <div className="font-bold text-white mb-1">{e.subject || 'No Subject'}</div>
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="font-bold text-white">{e.subject || 'No Subject'}</div>
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
+                      {e.status.toUpperCase()}
+                    </span>
+                  </div>
                   <div className="text-sm text-gray-400 mb-2">From: {e.from} | To: {e.recipientAlias}</div>
                   <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
                 </div>
