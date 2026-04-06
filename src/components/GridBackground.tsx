@@ -6,89 +6,88 @@ export default function GridBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on base
+    
+    // Use alpha: false for better performance if background is solid, 
+    // but we need it transparent to show the CSS background color/gradients behind it
+    const ctx = canvas.getContext('2d', { alpha: true }); 
     if (!ctx) return;
 
     let animationFrameId: number;
-    let stars: { x: number; y: number; radius: number; vx: number; vy: number; alpha: number; type: 'small' | 'medium' | 'large' }[] = [];
+    let particles: { x: number; y: number; radius: number; vy: number; alpha: number; type: 'small' | 'medium' | 'large' }[] = [];
 
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      initStars();
+      initParticles();
     };
 
-    const initStars = () => {
-      stars = [];
-      // Reduce density for better performance on mobile
-      const numStars = Math.floor((canvas.width * canvas.height) / 3000); 
-      for (let i = 0; i < numStars; i++) {
+    const initParticles = () => {
+      particles = [];
+      // Optimized density for premium feel without lag
+      const numParticles = Math.floor((canvas.width * canvas.height) / 8000); 
+      for (let i = 0; i < numParticles; i++) {
         const rand = Math.random();
         let type: 'small' | 'medium' | 'large' = 'small';
-        let radius = Math.random() * 1 + 0.5;
+        let radius = Math.random() * 0.8 + 0.2;
         
-        let vx = (Math.random() - 0.5) * 0.2;
-        let vy = (Math.random() - 0.5) * 0.2 - 0.05;
+        // Base speed moving downwards (gives illusion of moving up)
+        let vy = Math.random() * 0.5 + 0.2;
 
-        if (rand > 0.8) {
+        if (rand > 0.85) {
           type = 'medium';
-          radius = Math.random() * 1.5 + 1.0;
-          vx = (Math.random() - 0.5) * 0.3;
-          vy = (Math.random() - 0.5) * 0.3 - 0.1;
+          radius = Math.random() * 1.2 + 0.8;
+          vy = Math.random() * 0.8 + 0.5;
         }
-        if (rand > 0.95) {
+        if (rand > 0.98) {
           type = 'large';
           radius = Math.random() * 2.0 + 1.5;
-          vx = (Math.random() - 0.5) * 0.4;
-          vy = (Math.random() - 0.5) * 0.4 - 0.15;
+          vy = Math.random() * 1.2 + 0.8;
         }
 
-        stars.push({
+        particles.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
           radius,
-          vx,
           vy,
-          alpha: Math.random() * 0.5 + 0.3,
+          alpha: Math.random() * 0.5 + 0.1,
           type
         });
       }
     };
 
     const draw = () => {
-      // Simple solid fill is much faster than gradients every frame
-      ctx.fillStyle = '#030712'; // Base dark color
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas (transparent)
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw and update stars without expensive shadowBlur
-      stars.forEach(star => {
+      // Draw and update particles
+      particles.forEach(p => {
         ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         
-        if (star.type === 'large') {
-          ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
-        } else if (star.type === 'medium') {
-          ctx.fillStyle = `rgba(200, 240, 255, ${star.alpha})`;
+        // Premium colors: subtle whites and blues
+        if (p.type === 'large') {
+          ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha * 0.8})`;
+        } else if (p.type === 'medium') {
+          ctx.fillStyle = `rgba(139, 92, 246, ${p.alpha * 0.6})`; // Violet tint
         } else {
-          ctx.fillStyle = `rgba(240, 200, 255, ${star.alpha})`;
+          ctx.fillStyle = `rgba(59, 130, 246, ${p.alpha * 0.4})`; // Blue tint
         }
 
         ctx.fill();
 
-        // Move star
-        star.x += star.vx;
-        star.y += star.vy;
+        // Move particle downwards
+        p.y += p.vy;
         
-        // Wrap around
-        if (star.y < -20) star.y = canvas.height + 20;
-        if (star.y > canvas.height + 20) star.y = -20;
-        if (star.x < -20) star.x = canvas.width + 20;
-        if (star.x > canvas.width + 20) star.x = -20;
+        // Wrap around to top
+        if (p.y > canvas.height + 10) {
+          p.y = -10;
+          p.x = Math.random() * canvas.width; // Randomize X on respawn
+        }
 
-        // Twinkle effect (simplified)
-        star.alpha += (Math.random() - 0.5) * 0.05;
-        if (star.alpha < 0.2) star.alpha = 0.2;
-        if (star.alpha > 1) star.alpha = 1;
+        // Subtle twinkle
+        p.alpha += (Math.random() - 0.5) * 0.02;
+        if (p.alpha < 0.1) p.alpha = 0.1;
+        if (p.alpha > 0.8) p.alpha = 0.8;
       });
 
       animationFrameId = requestAnimationFrame(draw);
@@ -106,16 +105,20 @@ export default function GridBackground() {
 
   return (
     <>
+      {/* Base Dark Background */}
+      <div className="fixed inset-0 z-[-3] bg-[#0a0a0a]" />
+      
+      {/* Subtle Premium Gradients */}
+      <div className="fixed inset-0 z-[-2] pointer-events-none opacity-30">
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-violet-600/20 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
+      </div>
+
+      {/* Particle Canvas */}
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 z-[-2] pointer-events-none"
+        className="fixed inset-0 z-[-1] pointer-events-none"
       />
-      {/* Use CSS for nebulas instead of Canvas for GPU acceleration */}
-      <div className="fixed inset-0 z-[-1] pointer-events-none opacity-40">
-        <div className="absolute top-[30%] left-[20%] w-[40vw] h-[40vw] bg-neon-purple/10 rounded-full blur-[100px] mix-blend-screen transform-gpu"></div>
-        <div className="absolute top-[70%] left-[80%] w-[40vw] h-[40vw] bg-neon-blue/10 rounded-full blur-[100px] mix-blend-screen transform-gpu"></div>
-        <div className="absolute top-[90%] left-[50%] w-[50vw] h-[50vw] bg-neon-red/5 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
-      </div>
     </>
   );
 }

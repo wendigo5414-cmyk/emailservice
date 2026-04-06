@@ -1,27 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-premium-dark: #0a0a0a;
+  --color-premium-card: rgba(15, 15, 15, 0.7);
+  --color-premium-border: rgba(255, 255, 255, 0.08);
+  
   --color-neon-blue: #00f3ff;
   --color-neon-purple: #bc13fe;
   --color-neon-red: #ff003c;
   --color-neon-orange: #ff6a00;
   --color-neon-green: #00ff66;
-  --color-glass-bg: rgba(17, 24, 39, 0.9);
-  --color-glass-border: rgba(255, 255, 255, 0.1);
+  
+  --color-accent-primary: #3b82f6; /* Blue 500 */
+  --color-accent-secondary: #8b5cf6; /* Violet 500 */
 }
 
 @layer utilities {
   .glass {
-    @apply bg-glass-bg border border-glass-border shadow-lg;
+    @apply bg-premium-card border border-premium-border shadow-2xl backdrop-blur-xl;
   }
   .glass-panel {
-    @apply bg-gray-900/95 border border-white/5 shadow-xl rounded-2xl;
+    @apply bg-premium-card border border-premium-border shadow-2xl rounded-2xl backdrop-blur-xl;
+  }
+  .premium-gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400;
+  }
+  .premium-gradient-accent {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400;
   }
   .text-glow-blue {
-    text-shadow: 0 0 10px var(--color-neon-blue);
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
   }
   .text-glow-red {
-    text-shadow: 0 0 10px var(--color-neon-red);
+    text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
   }
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
@@ -33,9 +48,14 @@
 }
 
 body {
-  background-color: #030712; /* gray-950 */
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(188, 19, 254, 0.05), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(0, 243, 255, 0.05), transparent 25%);
-  background-attachment: fixed;
+  background-color: var(--color-premium-dark);
+  color: #e5e5e5;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }

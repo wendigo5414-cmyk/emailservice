@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/auth';
+import { useAdminStore } from '../store/adminStore';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { Settings, Package, ShoppingBag, Mail, ShieldAlert, Database } from 'lucide-react';
 
@@ -8,11 +9,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('config');
   
-  const [config, setConfig] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [emails, setEmails] = useState<any[]>([]);
-  const [aliases, setAliases] = useState<any[]>([]);
+  const { config, products, orders, emails, aliases, setConfig, setProducts, setOrders, setEmails, setAliases } = useAdminStore();
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -21,32 +18,32 @@ export default function AdminDashboard() {
       if (activeTab === 'config') {
         const res = await fetch('/api/admin/config', { headers });
         const data = await res.json();
-        setConfig(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+        if (JSON.stringify(config) !== JSON.stringify(data)) setConfig(data);
       } else if (activeTab === 'products') {
         const res = await fetch('/api/products'); // public route
         const data = await res.json();
-        setProducts(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+        if (JSON.stringify(products) !== JSON.stringify(data)) setProducts(data);
       } else if (activeTab === 'orders') {
         const res = await fetch('/api/admin/orders', { headers });
         const data = await res.json();
-        setOrders(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+        if (JSON.stringify(orders) !== JSON.stringify(data)) setOrders(data);
       } else if (activeTab === 'emails') {
         const res = await fetch('/api/admin/emails?mode=admin', { headers });
         const data = await res.json();
-        setEmails(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+        if (JSON.stringify(emails) !== JSON.stringify(data)) setEmails(data);
       } else if (activeTab === 'stocking') {
         const resAliases = await fetch('/api/admin/aliases', { headers });
         const dataAliases = await resAliases.json();
-        setAliases(prev => JSON.stringify(prev) === JSON.stringify(dataAliases) ? prev : dataAliases);
+        if (JSON.stringify(aliases) !== JSON.stringify(dataAliases)) setAliases(dataAliases);
         
         const resEmails = await fetch('/api/admin/emails?mode=stocking', { headers });
         const dataEmails = await resEmails.json();
-        setEmails(prev => JSON.stringify(prev) === JSON.stringify(dataEmails) ? prev : dataEmails);
+        if (JSON.stringify(emails) !== JSON.stringify(dataEmails)) setEmails(dataEmails);
       }
     } catch (err) {
       console.error(err);
     }
-  }, [activeTab, token]);
+  }, [activeTab, token, config, products, orders, emails, aliases, setConfig, setProducts, setOrders, setEmails, setAliases]);
 
   useEffect(() => {
     if (user && user.isAdmin) {
@@ -131,23 +128,23 @@ export default function AdminDashboard() {
   return (
     <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-8 text-white flex items-center gap-3">
-        <ShieldAlert className="w-8 h-8 text-neon-orange" /> Admin Control Panel
+        <ShieldAlert className="w-8 h-8 text-accent-primary" /> <span className="premium-gradient-text">Admin Control Panel</span>
       </h1>
 
-      <div className="flex flex-wrap gap-4 mb-8 border-b border-white/10 pb-4">
-        <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'config' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+      <div className="flex flex-wrap gap-4 mb-8 border-b border-premium-border pb-4">
+        <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'config' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <Settings className="w-4 h-4" /> Config
         </button>
-        <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'products' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+        <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'products' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <Package className="w-4 h-4" /> Products
         </button>
-        <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'orders' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+        <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'orders' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <ShoppingBag className="w-4 h-4" /> Orders
         </button>
-        <button onClick={() => setActiveTab('emails')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'emails' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+        <button onClick={() => setActiveTab('emails')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'emails' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <Mail className="w-4 h-4" /> Admin Inbox
         </button>
-        <button onClick={() => setActiveTab('stocking')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'stocking' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+        <button onClick={() => setActiveTab('stocking')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'stocking' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <Database className="w-4 h-4" /> Stocking Area
         </button>
       </div>
@@ -159,19 +156,19 @@ export default function AdminDashboard() {
             <div className="flex gap-4">
               <button 
                 onClick={() => handleModeChange('OFF')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'OFF' ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-gray-800 text-gray-400'}`}
+                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'OFF' ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-black/50 border border-premium-border text-gray-400 hover:bg-black'}`}
               >
                 OFF (Ignore)
               </button>
               <button 
                 onClick={() => handleModeChange('STOCKING')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'STOCKING' ? 'bg-neon-blue text-black shadow-[0_0_15px_rgba(0,243,255,0.5)]' : 'bg-gray-800 text-gray-400'}`}
+                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'STOCKING' ? 'bg-accent-primary text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-black/50 border border-premium-border text-gray-400 hover:bg-black'}`}
               >
                 STOCKING (7 Days Pending)
               </button>
               <button 
                 onClick={() => handleModeChange('ADMIN')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'ADMIN' ? 'bg-neon-purple text-white shadow-[0_0_15px_rgba(188,19,254,0.5)]' : 'bg-gray-800 text-gray-400'}`}
+                className={`px-6 py-3 rounded-lg font-bold transition-all ${currentMode === 'ADMIN' ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/50 border border-premium-border text-gray-400 hover:bg-black'}`}
               >
                 ADMIN (Direct to Inbox)
               </button>
@@ -184,23 +181,23 @@ export default function AdminDashboard() {
           <div>
             <h2 className="text-xl font-bold text-white mb-6">Add New Product</h2>
             <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
-              <input name="name" placeholder="Product Name" required className="bg-black/50 border border-white/10 rounded p-3 text-white" />
-              <input name="price" type="number" step="0.01" placeholder="Price ($)" required className="bg-black/50 border border-white/10 rounded p-3 text-white" />
-              <input name="thumbnail" placeholder="Image URL" className="bg-black/50 border border-white/10 rounded p-3 text-white" />
-              <select name="type" className="bg-black/50 border border-white/10 rounded p-3 text-white">
+              <input name="name" placeholder="Product Name" required className="bg-black/50 border border-premium-border rounded-lg p-3 text-white focus:border-accent-primary outline-none transition-colors" />
+              <input name="price" type="number" step="0.01" placeholder="Price ($)" required className="bg-black/50 border border-premium-border rounded-lg p-3 text-white focus:border-accent-primary outline-none transition-colors" />
+              <input name="thumbnail" placeholder="Image URL" className="bg-black/50 border border-premium-border rounded-lg p-3 text-white focus:border-accent-primary outline-none transition-colors" />
+              <select name="type" className="bg-black/50 border border-premium-border rounded-lg p-3 text-white focus:border-accent-primary outline-none transition-colors">
                 <option value="activated_email">Activated Email (Auto Stock)</option>
                 <option value="account">Account (Manual Stock)</option>
                 <option value="service">Service</option>
               </select>
-              <input name="stock" type="number" placeholder="Manual Stock (Leave 0 for Auto)" className="bg-black/50 border border-white/10 rounded p-3 text-white" />
-              <textarea name="description" placeholder="Description" className="bg-black/50 border border-white/10 rounded p-3 text-white md:col-span-2"></textarea>
-              <button type="submit" className="bg-neon-orange text-black font-bold py-3 rounded md:col-span-2 hover:bg-white transition-colors">Add Product</button>
+              <input name="stock" type="number" placeholder="Manual Stock (Leave 0 for Auto)" className="bg-black/50 border border-premium-border rounded-lg p-3 text-white focus:border-accent-primary outline-none transition-colors" />
+              <textarea name="description" placeholder="Description" className="bg-black/50 border border-premium-border rounded-lg p-3 text-white md:col-span-2 focus:border-accent-primary outline-none transition-colors"></textarea>
+              <button type="submit" className="bg-accent-primary text-white font-bold py-3 rounded-lg md:col-span-2 hover:bg-blue-600 transition-colors shadow-[0_0_15px_rgba(59,130,246,0.5)]">Add Product</button>
             </form>
 
             <h2 className="text-xl font-bold text-white mb-4">Current Products</h2>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-premium-border">
               <table className="w-full text-left text-gray-300">
-                <thead className="bg-white/5">
+                <thead className="bg-black/50 border-b border-premium-border">
                   <tr>
                     <th className="p-3">Name</th>
                     <th className="p-3">Type</th>
@@ -226,9 +223,9 @@ export default function AdminDashboard() {
         {activeTab === 'orders' && (
           <div>
             <h2 className="text-xl font-bold text-white mb-4">Recent Orders</h2>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-premium-border">
               <table className="w-full text-left text-gray-300">
-                <thead className="bg-white/5">
+                <thead className="bg-black/50 border-b border-premium-border">
                   <tr>
                     <th className="p-3">ID</th>
                     <th className="p-3">User</th>
@@ -238,12 +235,12 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {Array.isArray(orders) && orders.map(o => (
-                    <tr key={o._id} className="border-b border-white/5">
+                    <tr key={o._id} className="border-b border-premium-border hover:bg-white/5 transition-colors">
                       <td className="p-3 font-mono text-xs">{o._id}</td>
                       <td className="p-3">{o.userId?.username || 'Unknown'}</td>
                       <td className="p-3">${o.totalAmount} ({o.exactCryptoAmount} {o.cryptoCurrency})</td>
                       <td className="p-3">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${o.status === 'completed' ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${o.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-500'}`}>
                           {o.status.toUpperCase()}
                         </span>
                       </td>
@@ -260,18 +257,18 @@ export default function AdminDashboard() {
             <h2 className="text-xl font-bold text-white mb-4">Admin Inbox</h2>
             <div className="space-y-4">
               {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No admin emails found.</p> : emails.map(e => (
-                <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
+                <div key={e._id} className="bg-black/50 p-4 rounded-xl border border-premium-border hover:border-accent-primary transition-colors">
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-bold text-white">{e.subject || 'No Subject'}</div>
                     <div className="flex items-center gap-3">
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-blue-500/20 text-blue-400' : e.status === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-500/20 text-gray-400'}`}>
                         {e.status.toUpperCase()}
                       </span>
-                      <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium">Delete</button>
+                      <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium transition-colors">Delete</button>
                     </div>
                   </div>
                   <div className="text-sm text-gray-400 mb-2">From: {e.from} | To: {e.recipientAlias}</div>
-                  <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
+                  <div className="text-sm text-gray-300 font-mono bg-black/80 p-3 rounded-lg border border-premium-border">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
                 </div>
               ))}
             </div>
@@ -284,19 +281,19 @@ export default function AdminDashboard() {
             
             <div className="mb-8">
               <h3 className="text-lg font-bold text-white mb-4">Email Aliases</h3>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-premium-border">
                 <table className="w-full text-left text-gray-300">
-                  <thead className="bg-white/5">
+                  <thead className="bg-black/50 border-b border-premium-border">
                     <tr>
-                      <th className="p-3 rounded-tl">Alias</th>
+                      <th className="p-3">Alias</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Assigned To</th>
-                      <th className="p-3 rounded-tr">Created</th>
+                      <th className="p-3">Created</th>
                     </tr>
                   </thead>
                   <tbody>
                     {aliases.map(a => (
-                      <tr key={a._id} className="border-b border-white/5">
+                      <tr key={a._id} className="border-b border-premium-border hover:bg-white/5 transition-colors">
                         <td className="p-3">{a.alias}</td>
                         <td className="p-3">
                           <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${
@@ -321,18 +318,18 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-bold text-white mb-4">Stocking Emails</h3>
               <div className="space-y-4">
                 {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No stocking emails found.</p> : emails.map(e => (
-                  <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
+                  <div key={e._id} className="bg-black/50 p-4 rounded-xl border border-premium-border hover:border-accent-primary transition-colors">
                     <div className="flex justify-between items-start mb-1">
                       <div className="font-bold text-white">{e.subject || 'No Subject'}</div>
                       <div className="flex items-center gap-3">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-blue-500/20 text-blue-400' : e.status === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-500/20 text-gray-400'}`}>
                           {e.status.toUpperCase()}
                         </span>
-                        <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium">Delete</button>
+                        <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium transition-colors">Delete</button>
                       </div>
                     </div>
                     <div className="text-sm text-gray-400 mb-2">From: {e.from} | To: {e.recipientAlias}</div>
-                    <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
+                    <div className="text-sm text-gray-300 font-mono bg-black/80 p-3 rounded-lg border border-premium-border">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
                   </div>
                 ))}
               </div>
