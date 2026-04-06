@@ -377,6 +377,9 @@ async function startServer() {
 
   // --- Webhook Route (Email Receiver) ---
   app.post('/api/webhook/email', async (req, res) => {
+    console.log(`[EMAIL WEBHOOK] Received request at ${new Date().toISOString()}`);
+    console.log(`[EMAIL WEBHOOK] Headers:`, JSON.stringify(req.headers));
+    
     try {
       const authHeader = req.headers.authorization;
       const xAuthKey = req.headers['x-auth-key'];
@@ -387,22 +390,31 @@ async function startServer() {
         (xAuthKey && xAuthKey === expectedAuth);
 
       if (!isAuthorized) {
+        console.warn(`[EMAIL WEBHOOK] Unauthorized access attempt. Provided authHeader: ${authHeader}, xAuthKey: ${xAuthKey}`);
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
+      console.log(`[EMAIL WEBHOOK] Authorization successful.`);
+
       if (mongoose.connection.readyState !== 1) {
+        console.error(`[EMAIL WEBHOOK] Database not connected. ReadyState: ${mongoose.connection.readyState}`);
         return res.status(503).json({ error: 'Database not connected' });
       }
 
       const modeConfig = await Config.findOne({ key: 'emailMode' });
       const currentMode = modeConfig ? modeConfig.value : 'STOCKING';
+      console.log(`[EMAIL WEBHOOK] Current email mode: ${currentMode}`);
 
       if (currentMode === 'OFF') {
+        console.log(`[EMAIL WEBHOOK] Ignored email because mode is OFF.`);
         return res.status(200).json({ success: true, message: 'Ignored (Mode OFF)' });
       }
 
       const { to, from, subject, body } = req.body;
+      console.log(`[EMAIL WEBHOOK] Parsed body fields - To: ${to}, From: ${from}, Subject: ${subject}, Body Length: ${body ? body.length : 0}`);
+      
       if (!to || !body) {
+        console.error(`[EMAIL WEBHOOK] Missing required fields. to: ${!!to}, body: ${!!body}`);
         return res.status(400).json({ error: 'Missing required fields: to, body' });
       }
 
@@ -410,14 +422,17 @@ async function startServer() {
       let parsedHtml = '';
       
       if (body.includes('MIME-Version:') || body.includes('Content-Type:')) {
+        console.log(`[EMAIL WEBHOOK] Body looks like raw MIME, attempting to parse...`);
         try {
           const parsed = await simpleParser(body);
           parsedText = parsed.text || '';
           parsedHtml = parsed.html || '';
+          console.log(`[EMAIL WEBHOOK] MIME parsing successful. Text length: ${parsedText.length}, HTML length: ${parsedHtml.length}`);
         } catch (parseErr) {
-          console.error('Error parsing email body:', parseErr);
+          console.error('[EMAIL WEBHOOK] Error parsing email body:', parseErr);
         }
       } else {
+        console.log(`[EMAIL WEBHOOK] Body is not raw MIME, using as plain text.`);
         parsedText = body;
       }
 
@@ -428,9 +443,13 @@ async function startServer() {
       const keywordMatch = searchText.match(keywordRegex);
       if (keywordMatch) {
         otp = keywordMatch[1] || keywordMatch[2];
+        console.log(`[EMAIL WEBHOOK] Extracted OTP: ${otp}`);
+      } else {
+        console.log(`[EMAIL WEBHOOK] No OTP found in email content.`);
       }
 
       const finalStatus = String(currentMode).toUpperCase() === 'ADMIN' ? 'admin' : 'pending';
+      console.log(`[EMAIL WEBHOOK] Saving email with status: ${finalStatus}`);
 
       const newEmail = new Email({
         otp,
@@ -442,10 +461,12 @@ async function startServer() {
         status: finalStatus
       });
       await newEmail.save();
+      
+      console.log(`[EMAIL WEBHOOK] Email saved successfully with ID: ${newEmail._id}`);
 
       res.status(200).json({ success: true, message: `Email saved as ${finalStatus}` });
     } catch (error) {
-      console.error('Webhook error:', error);
+      console.error('[EMAIL WEBHOOK] Webhook error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

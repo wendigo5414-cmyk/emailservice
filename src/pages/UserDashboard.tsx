@@ -52,35 +52,56 @@ export default function UserDashboard() {
   }, []);
 
   const fetchEmails = useCallback(async (isInitial = false) => {
-    if (!token) return;
+    if (!token) {
+      console.log('[FRONTEND EMAIL FETCH] No token found, skipping fetch.');
+      return;
+    }
     try {
+      console.log(`[FRONTEND EMAIL FETCH] Starting fetch. isInitial: ${isInitial}`);
       if (isInitial) setLoading(true);
       
       const endpoint = user?.isAdmin ? '/api/admin/emails' : '/api/my-emails';
+      console.log(`[FRONTEND EMAIL FETCH] Calling endpoint: ${endpoint}`);
+      
       const res = await fetch(endpoint, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
-      if (!res.ok) throw new Error('Failed to fetch emails');
+      console.log(`[FRONTEND EMAIL FETCH] Response status: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to fetch emails. Status: ${res.status}`);
+      
       const data = await res.json();
+      console.log(`[FRONTEND EMAIL FETCH] Received ${data.length} emails from server.`);
       
       if (data.length > 0) {
         const latestId = data[0]._id;
         
         // Check for new emails and trigger notifications
         if (lastEmailIdRef.current && lastEmailIdRef.current !== latestId) {
+          console.log(`[FRONTEND EMAIL FETCH] New emails detected! Old latest ID: ${lastEmailIdRef.current}, New latest ID: ${latestId}`);
           const newEmails = [];
           for (const email of data) {
             if (email._id === lastEmailIdRef.current) break;
             newEmails.push(email);
           }
+          console.log(`[FRONTEND EMAIL FETCH] Found ${newEmails.length} new emails.`);
           
           // Show notification for new emails with OTP
           newEmails.forEach(email => {
-            if (email.otp && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification(`OTP: ${email.otp}`, {
-                body: `For: ${email.recipientAlias}`,
-              });
+            if (email.otp) {
+              console.log(`[FRONTEND EMAIL FETCH] New email contains OTP: ${email.otp}. Checking notification permissions...`);
+              if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                  console.log(`[FRONTEND EMAIL FETCH] Triggering notification for OTP: ${email.otp}`);
+                  new Notification(`OTP: ${email.otp}`, {
+                    body: `For: ${email.recipientAlias}`,
+                  });
+                } else {
+                  console.log(`[FRONTEND EMAIL FETCH] Notification permission not granted. Current status: ${Notification.permission}`);
+                }
+              } else {
+                console.log(`[FRONTEND EMAIL FETCH] Notifications not supported in this browser.`);
+              }
             }
           });
         }
@@ -90,11 +111,16 @@ export default function UserDashboard() {
 
       setEmails(prev => {
         // Only update if data actually changed to prevent unnecessary re-renders
-        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        if (JSON.stringify(prev) === JSON.stringify(data)) {
+          console.log(`[FRONTEND EMAIL FETCH] Data unchanged, skipping state update.`);
+          return prev;
+        }
+        console.log(`[FRONTEND EMAIL FETCH] Data changed, updating state.`);
         return data;
       });
       setError(null);
     } catch (err) {
+      console.error('[FRONTEND EMAIL FETCH] Error during fetch:', err);
       if (isInitial) {
         setError('Failed to connect to the server or database.');
       }
