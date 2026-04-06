@@ -56,6 +56,14 @@ const orderSchema = new mongoose.Schema({
 });
 const Order = mongoose.model('Order', orderSchema);
 
+const emailAliasSchema = new mongoose.Schema({
+  alias: { type: String, required: true, unique: true },
+  status: { type: String, enum: ['admin', 'stocking', 'stocked', 'assigned'], default: 'stocking' },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  createdAt: { type: Date, default: Date.now }
+});
+const EmailAlias = mongoose.model('EmailAlias', emailAliasSchema);
+
 const emailSchema = new mongoose.Schema({
   otp: { type: String, required: false },
   fullBody: { type: String, required: true },
@@ -185,17 +193,21 @@ async function startServer() {
   // --- Shop Routes ---
   app.get('/api/products', async (req, res) => {
     try {
-      // Auto-update pending emails to stock if older than 7 days
+      // Auto-update stocking aliases to stocked if older than 7 days
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      await Email.updateMany(
-        { status: 'pending', receivedAt: { $lte: sevenDaysAgo } },
-        { $set: { status: 'stock' } }
-      );
+      const aliasesToStock = await EmailAlias.find({ status: 'stocking', createdAt: { $lte: sevenDaysAgo } });
+      
+      for (const alias of aliasesToStock) {
+        alias.status = 'stocked';
+        await alias.save();
+        // Update all emails for this alias
+        await Email.updateMany({ recipientAlias: alias.alias, status: 'pending' }, { $set: { status: 'stock' } });
+      }
 
       const products = await Product.find();
       
       // Calculate dynamic stock for 'activated_email' products
-      const stockCount = await Email.countDocuments({ status: 'stock' });
+      const stockCount = await EmailAlias.countDocuments({ status: 'stocked' });
       
       const productsWithDynamicStock = products.map(p => {
         if (p.type === 'activated_email') {
@@ -333,11 +345,17 @@ async function startServer() {
       for (const item of order.items) {
         const product = await Product.findById(item.productId);
         if (product && product.type === 'activated_email') {
-          const emailsToAssign = await Email.find({ status: 'stock' }).limit(item.quantity);
-          for (const email of emailsToAssign) {
-            email.status = 'sold';
-            email.assignedTo = order.userId;
-            await email.save();
+          const aliasesToAssign = await EmailAlias.find({ status: 'stocked' }).limit(item.quantity);
+          for (const aliasDoc of aliasesToAssign) {
+            aliasDoc.status = 'assigned';
+            aliasDoc.assignedTo = order.userId;
+            await aliasDoc.save();
+            
+            // Update all existing emails for this alias
+            await Email.updateMany(
+              { recipientAlias: aliasDoc.alias },
+              { $set: { status: 'sold', assignedTo: order.userId } }
+            );
           }
         }
       }
@@ -350,8 +368,26 @@ async function startServer() {
 
   app.get('/api/admin/emails', authenticateToken, isAdmin, async (req, res) => {
     try {
-      const emails = await Email.find({ status: { $ne: 'sold' } }).sort({ receivedAt: -1 });
+      const mode = req.query.mode;
+      let query: any = { status: { $ne: 'sold' } };
+      
+      if (mode === 'admin') {
+        query.status = 'admin';
+      } else if (mode === 'stocking') {
+        query.status = { $in: ['pending', 'stock'] };
+      }
+      
+      const emails = await Email.find(query).sort({ receivedAt: -1 });
       res.json(emails);
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.get('/api/admin/aliases', authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const aliases = await EmailAlias.find().populate('assignedTo', 'username email').sort({ createdAt: -1 });
+      res.json(aliases);
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
@@ -376,6 +412,10 @@ async function startServer() {
   });
 
   // --- Webhook Route (Email Receiver) ---
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Server is awake' });
+  });
+
   app.post('/api/webhook/email', async (req, res) => {
     console.log(`[EMAIL WEBHOOK] Received request at ${new Date().toISOString()}`);
     console.log(`[EMAIL WEBHOOK] Headers:`, JSON.stringify(req.headers));
@@ -448,7 +488,23 @@ async function startServer() {
         console.log(`[EMAIL WEBHOOK] No OTP found in email content.`);
       }
 
-      const finalStatus = String(currentMode).toUpperCase() === 'ADMIN' ? 'admin' : 'pending';
+      // Check or create EmailAlias to determine permanent status
+      let aliasDoc = await EmailAlias.findOne({ alias: to });
+      if (!aliasDoc) {
+        const initialStatus = String(currentMode).toUpperCase() === 'ADMIN' ? 'admin' : 'stocking';
+        aliasDoc = new EmailAlias({ alias: to, status: initialStatus });
+        await aliasDoc.save();
+        console.log(`[EMAIL WEBHOOK] Created new EmailAlias for ${to} with status ${initialStatus}`);
+      } else {
+        console.log(`[EMAIL WEBHOOK] Found existing EmailAlias for ${to} with status ${aliasDoc.status}`);
+      }
+
+      // Map alias status to email status
+      let finalStatus = 'pending';
+      if (aliasDoc.status === 'admin') finalStatus = 'admin';
+      else if (aliasDoc.status === 'stocked') finalStatus = 'stock';
+      else if (aliasDoc.status === 'assigned') finalStatus = 'sold';
+      
       console.log(`[EMAIL WEBHOOK] Saving email with status: ${finalStatus}`);
 
       const newEmail = new Email({
@@ -458,7 +514,8 @@ async function startServer() {
         recipientAlias: to,
         from,
         subject,
-        status: finalStatus
+        status: finalStatus,
+        assignedTo: aliasDoc.assignedTo
       });
       await newEmail.save();
       

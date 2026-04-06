@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/auth';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { Settings, Package, ShoppingBag, Mail, ShieldAlert } from 'lucide-react';
+import { Settings, Package, ShoppingBag, Mail, ShieldAlert, Database } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
@@ -12,37 +12,53 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [emails, setEmails] = useState<any[]>([]);
+  const [aliases, setAliases] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (user && user.isAdmin) {
-      fetchData();
-    }
-  }, [user, activeTab]);
-
-  if (!user || !user.isAdmin) {
-    return <Navigate to="/" replace />;
-  }
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    if (!token) return;
     const headers = { 'Authorization': `Bearer ${token}` };
     try {
       if (activeTab === 'config') {
         const res = await fetch('/api/admin/config', { headers });
-        setConfig(await res.json());
+        const data = await res.json();
+        setConfig(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
       } else if (activeTab === 'products') {
         const res = await fetch('/api/products'); // public route
-        setProducts(await res.json());
+        const data = await res.json();
+        setProducts(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
       } else if (activeTab === 'orders') {
         const res = await fetch('/api/admin/orders', { headers });
-        setOrders(await res.json());
+        const data = await res.json();
+        setOrders(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
       } else if (activeTab === 'emails') {
-        const res = await fetch('/api/admin/emails', { headers });
-        setEmails(await res.json());
+        const res = await fetch('/api/admin/emails?mode=admin', { headers });
+        const data = await res.json();
+        setEmails(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+      } else if (activeTab === 'stocking') {
+        const resAliases = await fetch('/api/admin/aliases', { headers });
+        const dataAliases = await resAliases.json();
+        setAliases(prev => JSON.stringify(prev) === JSON.stringify(dataAliases) ? prev : dataAliases);
+        
+        const resEmails = await fetch('/api/admin/emails?mode=stocking', { headers });
+        const dataEmails = await resEmails.json();
+        setEmails(prev => JSON.stringify(prev) === JSON.stringify(dataEmails) ? prev : dataEmails);
       }
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [activeTab, token]);
+
+  useEffect(() => {
+    if (user && user.isAdmin) {
+      fetchData();
+      const interval = setInterval(fetchData, 3000); // Robust 3-second polling
+      return () => clearInterval(interval);
+    }
+  }, [user, activeTab, fetchData]);
+
+  if (!user || !user.isAdmin) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleModeChange = async (newMode: string) => {
     const previousConfig = [...config];
@@ -130,6 +146,9 @@ export default function AdminDashboard() {
         </button>
         <button onClick={() => setActiveTab('emails')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'emails' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
           <Mail className="w-4 h-4" /> Admin Inbox
+        </button>
+        <button onClick={() => setActiveTab('stocking')} className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${activeTab === 'stocking' ? 'bg-neon-orange text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+          <Database className="w-4 h-4" /> Stocking Area
         </button>
       </div>
 
@@ -238,7 +257,7 @@ export default function AdminDashboard() {
 
         {activeTab === 'emails' && (
           <div>
-            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox (Unsold & Stock Emails)</h2>
+            <h2 className="text-xl font-bold text-white mb-4">Admin Inbox</h2>
             <div className="space-y-4">
               {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No admin emails found.</p> : emails.map(e => (
                 <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
@@ -255,6 +274,68 @@ export default function AdminDashboard() {
                   <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'stocking' && (
+          <div>
+            <h2 className="text-xl font-bold text-white mb-4">Stocking Area</h2>
+            
+            <div className="mb-8">
+              <h3 className="text-lg font-bold text-white mb-4">Email Aliases</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-gray-300">
+                  <thead className="bg-white/5">
+                    <tr>
+                      <th className="p-3 rounded-tl">Alias</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Assigned To</th>
+                      <th className="p-3 rounded-tr">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aliases.map(a => (
+                      <tr key={a._id} className="border-b border-white/5">
+                        <td className="p-3">{a.alias}</td>
+                        <td className="p-3">
+                          <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${
+                            a.status === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                            a.status === 'stocked' ? 'bg-green-500/20 text-green-400' :
+                            a.status === 'assigned' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-yellow-500/20 text-yellow-400'
+                          }`}>
+                            {a.status}
+                          </span>
+                        </td>
+                        <td className="p-3">{a.assignedTo ? a.assignedTo.username : 'None'}</td>
+                        <td className="p-3">{new Date(a.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4">Stocking Emails</h3>
+              <div className="space-y-4">
+                {!Array.isArray(emails) || emails.length === 0 ? <p className="text-gray-500">No stocking emails found.</p> : emails.map(e => (
+                  <div key={e._id} className="bg-black/30 p-4 rounded border border-white/5">
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="font-bold text-white">{e.subject || 'No Subject'}</div>
+                      <div className="flex items-center gap-3">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${e.status === 'stock' ? 'bg-neon-blue/20 text-neon-blue' : e.status === 'admin' ? 'bg-neon-purple/20 text-neon-purple' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {e.status.toUpperCase()}
+                        </span>
+                        <button onClick={() => handleDeleteEmail(e._id)} className="text-red-500 hover:text-red-400 text-sm font-medium">Delete</button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400 mb-2">From: {e.from} | To: {e.recipientAlias}</div>
+                    <div className="text-sm text-gray-300 font-mono bg-black/50 p-2 rounded">{e.otp ? `OTP: ${e.otp}` : 'No OTP detected'}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
