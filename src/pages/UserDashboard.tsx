@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mail, Trash2, Settings, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database, Send } from 'lucide-react';
+import { Mail, Trash2, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database, Send } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -11,6 +11,22 @@ import { useNavigate } from 'react-router-dom';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const getTimerDisplay = (createdAt: string) => {
+  const createdDate = new Date(createdAt);
+  const expiryDate = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  
+  if (now > expiryDate) {
+    return { text: 'AGED', isAged: true };
+  }
+  
+  const diff = expiryDate.getTime() - now.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  
+  return { text: `${days}d ${hours}h left`, isAged: false };
+};
 
 type Email = {
   _id: string;
@@ -34,10 +50,29 @@ type User = {
 export default function UserDashboard() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'trash' | 'settings'>('inbox');
+  const [activeTab, setActiveTabState] = useState<'inbox' | 'trash' | 'aliases'>(() => {
+    const hash = window.location.hash.replace('#', '');
+    return ['inbox', 'trash', 'aliases'].includes(hash) ? (hash as any) : 'inbox';
+  });
+
+  const setActiveTab = (tab: 'inbox' | 'trash' | 'aliases') => {
+    setActiveTabState(tab);
+    window.location.hash = tab;
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (['inbox', 'trash', 'aliases'].includes(hash)) {
+        setActiveTabState(hash as any);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   const [liveMode, setLiveMode] = useState(false);
   
-  const { emails, users, setEmails, setUsers } = useUserStore();
+  const { emails, users, aliases, setEmails, setUsers } = useUserStore();
   
   const [loading, setLoading] = useState(emails.length === 0);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +97,7 @@ export default function UserDashboard() {
       console.log(`[FRONTEND EMAIL FETCH] Starting fetch. isInitial: ${isInitial}`);
       if (isInitial && emails.length === 0) setLoading(true);
       
-      const endpoint = user?.isAdmin ? '/api/admin/emails' : '/api/my-emails';
+      const endpoint = '/api/my-emails';
       console.log(`[FRONTEND EMAIL FETCH] Calling endpoint: ${endpoint}`);
       
       const res = await fetch(endpoint, {
@@ -144,12 +179,31 @@ export default function UserDashboard() {
     }
   }, [token, user]);
 
+  const fetchAliases = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/my-aliases', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const { setAliases } = useUserStore.getState();
+        setAliases(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed to fetch aliases', err);
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchEmails(true);
     fetchUsers();
-    const interval = setInterval(() => fetchEmails(false), 3000); // Poll every 3 seconds
+    fetchAliases();
+    const interval = setInterval(() => {
+      fetchEmails(false);
+      fetchAliases();
+    }, 3000); // Poll every 3 seconds
     return () => clearInterval(interval);
-  }, [fetchEmails, fetchUsers]);
+  }, [fetchEmails, fetchUsers, fetchAliases]);
 
   const deleteEmail = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -175,37 +229,52 @@ export default function UserDashboard() {
     }
   };
 
-  const assignEmail = async (emailId: string, userId: string) => {
+  const assignEmail = async (recipientAlias: string, userId: string) => {
     const previousEmails = [...emails];
+    const previousAliases = [...aliases];
     const previousSelected = selectedEmail;
     
-    const emailToUpdate = emails.find(e => e._id === emailId);
-    if (emailToUpdate) {
-      const updatedEmailOptimistic = { ...emailToUpdate, assignedTo: userId || null };
-      setEmails(emails.map(e => e._id === emailId ? updatedEmailOptimistic : e));
-      if (selectedEmail?._id === emailId) {
-        setSelectedEmail(updatedEmailOptimistic);
+    // Optimistically update all emails with this recipientAlias
+    const updatedEmails = emails.map(e => {
+      if (e.recipientAlias === recipientAlias) {
+        return { ...e, assignedTo: userId || null };
       }
+      return e;
+    });
+    
+    const updatedAliases = aliases.map(a => {
+      if (a.alias === recipientAlias) {
+        return { ...a, assignedTo: userId || null, status: userId ? 'assigned' : 'unassigned' };
+      }
+      return a;
+    });
+    
+    setEmails(updatedEmails);
+    const { setAliases } = useUserStore.getState();
+    setAliases(updatedAliases);
+    
+    if (selectedEmail?.recipientAlias === recipientAlias) {
+      setSelectedEmail({ ...selectedEmail, assignedTo: userId || null });
     }
 
     try {
-      const res = await fetch(`/api/admin/emails/${emailId}/assign`, {
+      const res = await fetch(`/api/admin/emails/assign-by-alias`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
         },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ recipientAlias, userId })
       });
       if (!res.ok) throw new Error('Failed');
-      const updatedEmail = await res.json();
-      setEmails(emails.map(e => e._id === emailId ? updatedEmail : e));
-      if (selectedEmail?._id === emailId) {
-        setSelectedEmail(updatedEmail);
-      }
+      
+      // Fetch fresh emails to ensure sync
+      fetchEmails(false);
+      fetchAliases();
     } catch (err) {
       console.error('Failed to assign email', err);
       setEmails(previousEmails);
+      setAliases(previousAliases);
       setSelectedEmail(previousSelected);
     }
   };
@@ -330,9 +399,9 @@ export default function UserDashboard() {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 glass border-r border-premium-border flex flex-col transform transition-transform duration-300 ease-in-out shrink-0 shadow-2xl md:shadow-none",
+        "fixed top-0 bottom-0 left-0 z-40 w-64 glass border-r border-premium-border flex flex-col transform transition-transform duration-300 ease-in-out shrink-0 shadow-2xl md:shadow-none",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full",
-        "md:translate-x-0 md:static"
+        "md:translate-x-0 md:static md:h-screen"
       )}>
         <div className="p-5 flex items-center justify-between gap-3 border-b border-premium-border">
           <div className="flex items-center gap-3">
@@ -375,6 +444,17 @@ export default function UserDashboard() {
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => { setActiveTab('aliases'); setSelectedEmail(null); setIsSidebarOpen(false); }}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeTab === 'aliases' ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "text-gray-400 hover:bg-white/5 hover:text-white border border-transparent"
+            )}
+          >
+            <Database className="w-4 h-4" />
+            Email IDs
+          </button>
           
           <button
             onClick={() => { setActiveTab('trash'); setSelectedEmail(null); setIsSidebarOpen(false); }}
@@ -386,19 +466,6 @@ export default function UserDashboard() {
             <Trash2 className="w-4 h-4" />
             Trash
           </button>
-          
-          {user?.isAdmin && (
-            <button
-              onClick={() => { setActiveTab('settings'); setSelectedEmail(null); setIsSidebarOpen(false); }}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                activeTab === 'settings' ? "bg-accent-primary/20 text-accent-primary border border-accent-primary/30" : "text-gray-400 hover:bg-white/5 hover:text-white border border-transparent"
-              )}
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </button>
-          )}
         </nav>
 
         <div className="p-4 space-y-2.5">
@@ -420,8 +487,34 @@ export default function UserDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-[calc(100vh-8rem)] md:h-screen overflow-hidden bg-transparent w-full">
-        {/* Header */}
+      <main className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-transparent relative min-w-0">
+        {/* Mobile Header */}
+        <div className="md:hidden glass border-b border-premium-border px-4 py-3 flex items-center justify-between shrink-0 shadow-sm z-20 sticky top-0 bg-black/80 backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-bold text-white capitalize tracking-tight">
+              {selectedEmail ? 'Read Email' : activeTab}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setLoading(true);
+                fetchEmails(false).finally(() => setLoading(false));
+              }}
+              className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop Header */}
         <header className="glass border-b border-premium-border px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-10 hidden md:flex">
           <div className="flex items-center gap-4">
             <button 
@@ -505,7 +598,7 @@ export default function UserDashboard() {
                       <select 
                         className="text-sm font-medium bg-black/50 text-white border border-premium-border rounded-lg py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-accent-primary focus:border-accent-primary outline-none transition-all cursor-pointer"
                         value={selectedEmail.assignedTo || ''}
-                        onChange={(e) => assignEmail(selectedEmail._id, e.target.value)}
+                        onChange={(e) => assignEmail(selectedEmail.recipientAlias, e.target.value)}
                       >
                         <option value="">Unassigned</option>
                         {users.map(u => (
@@ -596,18 +689,24 @@ export default function UserDashboard() {
                           {user?.isAdmin && (
                             <div className="w-auto shrink-0 text-xs flex gap-2">
                               {email.status === 'admin' && (
-                                <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">ADMIN</span>
+                                <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">ADMIN</span>
                               )}
                               {email.status === 'pending' && (
-                                <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">PENDING</span>
+                                <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">PENDING</span>
                               )}
                               {email.status === 'stock' && (
-                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">STOCK</span>
+                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">STOCK</span>
                               )}
                               {email.assignedTo ? (
-                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">Assigned</span>
+                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">
+                                  <span className="hidden md:inline">ASSIGNED TO: {users.find(u => u._id === email.assignedTo)?.username || 'Unknown'}</span>
+                                  <span className="md:hidden">ASSIGNED</span>
+                                </span>
                               ) : (
-                                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">Unassigned</span>
+                                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">
+                                  <span className="hidden md:inline">Unassigned</span>
+                                  <span className="md:hidden">UNASSIGNED</span>
+                                </span>
                               )}
                             </div>
                           )}
@@ -632,6 +731,79 @@ export default function UserDashboard() {
                 </div>
               )}
 
+              {activeTab === 'aliases' && (
+                <div className="glass-panel overflow-hidden">
+                  <div className="p-6 border-b border-premium-border flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-white tracking-tight">Email IDs</h3>
+                  </div>
+                  <div className="divide-y divide-premium-border">
+                    {aliases.length === 0 && !loading && !error ? (
+                      <div className="text-center py-32">
+                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 border border-premium-border">
+                          <Database className="w-10 h-10 text-gray-500" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white tracking-tight">No Email IDs found</h3>
+                        <p className="text-gray-400 mt-2 font-medium">You don't have any email IDs yet.</p>
+                      </div>
+                    ) : (
+                      aliases.map((alias) => {
+                        const timer = getTimerDisplay(alias.createdAt);
+                        return (
+                          <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <span className="font-bold text-white text-lg">{alias.alias}</span>
+                                {timer.isAged ? (
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                                    AGED
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30 flex items-center gap-1">
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                    {timer.text}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-sm">
+                                <span className={cn(
+                                  "px-2 py-0.5 rounded-full font-bold border",
+                                  alias.status === 'unassigned' ? "bg-gray-500/20 text-gray-400 border-gray-500/30" :
+                                  alias.status === 'admin' ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                                  alias.status === 'stocking' ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                                  "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                )}>
+                                  {alias.status.toUpperCase()}
+                                </span>
+                                {alias.assignedTo && (
+                                  <span className="text-gray-400">
+                                    Assigned to: <span className="text-white font-medium">{users.find(u => u._id === alias.assignedTo)?.email || 'Unknown User'}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {user?.isAdmin && (
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <select
+                                  value={alias.assignedTo || ''}
+                                  onChange={(e) => assignEmail(alias.alias, e.target.value)}
+                                  className="flex-1 sm:w-48 bg-black/50 border border-premium-border rounded-lg px-3 py-2 text-sm text-white focus:border-accent-primary outline-none transition-colors"
+                                >
+                                  <option value="">Unassigned</option>
+                                  {users.map(u => (
+                                    <option key={u._id} value={u._id}>{u.email}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
               {activeTab === 'trash' && (
                 <div className="glass-panel p-8">
                   <div className="flex justify-between items-center mb-8">
@@ -646,89 +818,6 @@ export default function UserDashboard() {
                   <div className="text-center py-24 border-2 border-dashed border-premium-border rounded-2xl bg-black/20">
                     <Trash2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
                     <p className="text-gray-500 font-medium">Trash is empty</p>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'settings' && user?.isAdmin && (
-                <div className="max-w-3xl mx-auto space-y-6">
-                  <div className="glass-panel p-8">
-                    <h3 className="text-lg font-bold text-white mb-2 tracking-tight">Webhook Configuration</h3>
-                    <p className="text-gray-400 mb-8 text-sm font-medium">
-                      Configure your Cloudflare Email Worker to forward emails to this endpoint.
-                    </p>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">Webhook URL</label>
-                        <div className="flex items-center gap-3">
-                          <code className="flex-1 block p-3.5 bg-black/50 border border-premium-border rounded-xl text-sm text-gray-300 font-mono font-medium">
-                            {window.location.origin}/webhook/email
-                          </code>
-                          <button 
-                            onClick={() => handleCopy(`${window.location.origin}/webhook/email`)}
-                            className="p-3.5 bg-accent-primary hover:bg-blue-600 text-white rounded-xl transition-all active:scale-95 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="glass-panel p-8">
-                    <h3 className="text-lg font-bold text-white mb-6 tracking-tight">Cloudflare Worker Code</h3>
-                    <div className="relative group">
-                      <pre className="p-6 bg-black/80 text-gray-300 rounded-xl text-sm font-mono overflow-x-auto border border-premium-border shadow-inner">
-{`export default {
-  async email(message, env, ctx) {
-    const rawEmail = await new Response(message.raw).text();
-    
-    const renderUrl = "${window.location.origin}/webhook/email";
-
-    await fetch(renderUrl, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "x-api-secret-key": "YOUR_API_SECRET_KEY" // Add your key here
-      },
-      body: JSON.stringify({
-        from: message.from,
-        to: message.to,
-        subject: message.headers.get("subject"),
-        body: rawEmail
-      })
-    });
-  }
-}`}
-                      </pre>
-                      <button 
-                        onClick={() => handleCopy(`export default {
-  async email(message, env, ctx) {
-    const rawEmail = await new Response(message.raw).text();
-    
-    const renderUrl = "${window.location.origin}/webhook/email";
-
-    await fetch(renderUrl, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "x-api-secret-key": "YOUR_API_SECRET_KEY" // Add your key here
-      },
-      body: JSON.stringify({
-        from: message.from,
-        to: message.to,
-        subject: message.headers.get("subject"),
-        body: rawEmail
-      })
-    });
-  }
-}`)}
-                        className="absolute top-4 right-4 p-2.5 bg-accent-primary/20 hover:bg-accent-primary text-white rounded-lg transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm active:scale-95 border border-accent-primary/30"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, User, LogOut, ShieldAlert, Package, Mail } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useCartStore } from '../store/cart';
@@ -8,6 +8,11 @@ export default function Navbar() {
   const { user, logout } = useAuthStore();
   const { items } = useCartStore();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  if (location.pathname === '/emails') {
+    return null;
+  }
 
   const handleLogout = () => {
     logout();

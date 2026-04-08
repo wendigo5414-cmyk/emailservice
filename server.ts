@@ -58,7 +58,7 @@ const Order = mongoose.model('Order', orderSchema);
 
 const emailAliasSchema = new mongoose.Schema({
   alias: { type: String, required: true, unique: true },
-  status: { type: String, enum: ['admin', 'stocking', 'stocked', 'assigned'], default: 'stocking' },
+  status: { type: String, enum: ['admin', 'stocking', 'stocked', 'assigned', 'unassigned'], default: 'stocking' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdAt: { type: Date, default: Date.now }
 });
@@ -71,7 +71,7 @@ const emailSchema = new mongoose.Schema({
   recipientAlias: { type: String, required: true },
   from: { type: String, required: false },
   subject: { type: String, required: false },
-  status: { type: String, enum: ['pending', 'stock', 'sold', 'admin'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'stock', 'sold', 'admin', 'unassigned'], default: 'pending' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   receivedAt: { type: Date, default: Date.now },
 });
@@ -259,8 +259,25 @@ async function startServer() {
   // --- User Emails Route ---
   app.get('/api/my-emails', authenticateToken, async (req: any, res) => {
     try {
-      const emails = await Email.find({ assignedTo: req.user.id }).sort({ receivedAt: -1 });
+      let query: any = { assignedTo: req.user.id };
+      if (req.user.isAdmin) {
+        query = { $or: [{ assignedTo: req.user.id }, { status: 'admin' }] };
+      }
+      const emails = await Email.find(query).sort({ receivedAt: -1 });
       res.json(emails);
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.get('/api/my-aliases', authenticateToken, async (req: any, res) => {
+    try {
+      let query: any = { assignedTo: req.user.id };
+      if (req.user.isAdmin) {
+        query = {}; // Admins can see all aliases to assign them
+      }
+      const aliases = await EmailAlias.find(query).sort({ createdAt: -1 });
+      res.json(aliases);
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
@@ -290,6 +307,28 @@ async function startServer() {
       const { userId } = req.body;
       const email = await Email.findByIdAndUpdate(req.params.id, { assignedTo: userId }, { new: true });
       res.json(email);
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.post('/api/admin/emails/assign-by-alias', authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const { recipientAlias, userId } = req.body;
+      
+      // Update all emails with this recipient alias
+      await Email.updateMany(
+        { recipientAlias },
+        { $set: { assignedTo: userId || null } }
+      );
+      
+      // Also update the EmailAlias document
+      await EmailAlias.findOneAndUpdate(
+        { alias: recipientAlias },
+        { $set: { assignedTo: userId || null } }
+      );
+      
+      res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
@@ -445,11 +484,6 @@ async function startServer() {
       const currentMode = modeConfig ? modeConfig.value : 'STOCKING';
       console.log(`[EMAIL WEBHOOK] Current email mode: ${currentMode}`);
 
-      if (currentMode === 'OFF') {
-        console.log(`[EMAIL WEBHOOK] Ignored email because mode is OFF.`);
-        return res.status(200).json({ success: true, message: 'Ignored (Mode OFF)' });
-      }
-
       const { to, from, subject, body } = req.body;
       console.log(`[EMAIL WEBHOOK] Parsed body fields - To: ${to}, From: ${from}, Subject: ${subject}, Body Length: ${body ? body.length : 0}`);
       
@@ -491,7 +525,10 @@ async function startServer() {
       // Check or create EmailAlias to determine permanent status
       let aliasDoc = await EmailAlias.findOne({ alias: to });
       if (!aliasDoc) {
-        const initialStatus = String(currentMode).toUpperCase() === 'ADMIN' ? 'admin' : 'stocking';
+        let initialStatus = 'stocking';
+        if (String(currentMode).toUpperCase() === 'ADMIN') initialStatus = 'admin';
+        if (String(currentMode).toUpperCase() === 'OFF') initialStatus = 'unassigned';
+        
         aliasDoc = new EmailAlias({ alias: to, status: initialStatus });
         await aliasDoc.save();
         console.log(`[EMAIL WEBHOOK] Created new EmailAlias for ${to} with status ${initialStatus}`);
@@ -504,6 +541,7 @@ async function startServer() {
       if (aliasDoc.status === 'admin') finalStatus = 'admin';
       else if (aliasDoc.status === 'stocked') finalStatus = 'stock';
       else if (aliasDoc.status === 'assigned') finalStatus = 'sold';
+      else if (aliasDoc.status === 'unassigned') finalStatus = 'unassigned';
       
       console.log(`[EMAIL WEBHOOK] Saving email with status: ${finalStatus}`);
 
