@@ -766,15 +766,15 @@ export default function UserDashboard() {
                         const timer = getTimerDisplay(alias.createdAt);
                         return (
                           <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div>
+                            <div className="min-w-0 w-full sm:flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <span className="font-bold text-white text-lg">{alias.alias}</span>
+                                <span className="font-bold text-white text-lg truncate" title={alias.alias}>{alias.alias}</span>
                                 {timer.isAged ? (
-                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                                  <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
                                     AGED
                                   </span>
                                 ) : (
-                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30 flex items-center gap-1">
+                                  <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30 flex items-center gap-1">
                                     <RefreshCw className="w-3 h-3 animate-spin" />
                                     {timer.text}
                                   </span>
@@ -822,7 +822,7 @@ export default function UserDashboard() {
                                     });
                                     if (res.ok) {
                                       // Update local state
-                                      useUserStore.getState().setAliases(aliases.filter(a => a._id !== alias._id));
+                                      useUserStore.getState().setAliases(aliases.map(a => a._id === alias._id ? { ...a, isDeleted: true } : a));
                                     }
                                   } catch (err) {
                                     console.error('Failed to delete alias', err);
@@ -858,14 +858,14 @@ export default function UserDashboard() {
                       </div>
                     ) : (
                       aliases.filter(a => a.isDeleted).map((alias) => {
-                        const aliasEmailCount = emails.filter(e => e.recipientAlias === alias.alias).length;
+                        const aliasEmailCount = alias.deletedMessageCount || 0;
                         return (
                           <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div>
+                            <div className="min-w-0 w-full sm:flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <span className="font-bold text-white text-lg">{alias.alias}</span>
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30">
-                                  {aliasEmailCount} {aliasEmailCount === 1 ? 'Email' : 'Emails'}
+                                <span className="font-bold text-white text-lg truncate" title={alias.alias}>{alias.alias}</span>
+                                <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30">
+                                  {aliasEmailCount} {aliasEmailCount === 1 ? 'New Email' : 'New Emails'}
                                 </span>
                               </div>
                             </div>
@@ -879,7 +879,7 @@ export default function UserDashboard() {
                                       headers: { 'Authorization': `Bearer ${token}` }
                                     });
                                     if (res.ok) {
-                                      useUserStore.getState().setAliases(aliases.map(a => a._id === alias._id ? { ...a, isDeleted: false } : a));
+                                      useUserStore.getState().setAliases(aliases.map(a => a._id === alias._id ? { ...a, isDeleted: false, deletedMessageCount: 0 } : a));
                                     }
                                   } catch (err) {
                                     console.error('Failed to restore alias', err);

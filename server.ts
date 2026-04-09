@@ -61,6 +61,7 @@ const emailAliasSchema = new mongoose.Schema({
   status: { type: String, enum: ['admin', 'stocking', 'stocked', 'assigned', 'unassigned'], default: 'stocking' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   isDeleted: { type: Boolean, default: false },
+  deletedMessageCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 const EmailAlias = mongoose.model('EmailAlias', emailAliasSchema);
@@ -303,7 +304,7 @@ async function startServer() {
       if (req.user.isAdmin) {
         query = { _id: req.params.id };
       }
-      await EmailAlias.findOneAndUpdate(query, { isDeleted: false });
+      await EmailAlias.findOneAndUpdate(query, { isDeleted: false, deletedMessageCount: 0 });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
@@ -561,6 +562,13 @@ async function startServer() {
         console.log(`[EMAIL WEBHOOK] Created new EmailAlias for ${to} with status ${initialStatus}`);
       } else {
         console.log(`[EMAIL WEBHOOK] Found existing EmailAlias for ${to} with status ${aliasDoc.status}`);
+      }
+
+      if (aliasDoc.isDeleted) {
+        console.log(`[EMAIL WEBHOOK] Alias ${to} is deleted. Incrementing deletedMessageCount and skipping email save.`);
+        aliasDoc.deletedMessageCount = (aliasDoc.deletedMessageCount || 0) + 1;
+        await aliasDoc.save();
+        return res.status(200).json({ success: true, message: 'Email skipped for deleted alias' });
       }
 
       // Map alias status to email status
