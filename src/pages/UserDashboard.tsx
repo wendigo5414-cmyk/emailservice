@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mail, Trash2, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database, Send } from 'lucide-react';
+import { Mail, Trash2, Copy, Power, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, UserCircle2, Menu, X, Database, Send, RotateCcw } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -438,9 +438,9 @@ export default function UserDashboard() {
           >
             <Mail className="w-4 h-4" />
             Inbox
-            {emails.length > 0 && (
+            {emails.filter(e => !aliases.find(a => a.alias === e.recipientAlias)?.isDeleted).length > 0 && (
               <span className="ml-auto bg-accent-primary text-white py-0.5 px-2.5 rounded-full text-xs font-bold shadow-sm">
-                {emails.length}
+                {emails.filter(e => !aliases.find(a => a.alias === e.recipientAlias)?.isDeleted).length}
               </span>
             )}
           </button>
@@ -454,6 +454,22 @@ export default function UserDashboard() {
           >
             <Database className="w-4 h-4" />
             Email IDs
+          </button>
+          
+          <button
+            onClick={() => { setActiveTab('restore'); setSelectedEmail(null); setIsSidebarOpen(false); }}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeTab === 'restore' ? "bg-accent-primary/20 text-accent-primary border border-accent-primary/30" : "text-gray-400 hover:bg-white/5 hover:text-white border border-transparent"
+            )}
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restore
+            {aliases.filter(a => a.isDeleted).length > 0 && (
+              <span className="ml-auto bg-accent-primary/20 text-accent-primary py-0.5 px-2 rounded-full text-xs font-bold">
+                {aliases.filter(a => a.isDeleted).length}
+              </span>
+            )}
           </button>
           
           <button
@@ -652,7 +668,7 @@ export default function UserDashboard() {
               {activeTab === 'inbox' && (
                 <div className="glass-panel overflow-hidden">
                   <div className="divide-y divide-premium-border">
-                    {emails.length === 0 && !loading && !error ? (
+                    {emails.filter(e => !aliases.find(a => a.alias === e.recipientAlias)?.isDeleted).length === 0 && !loading && !error ? (
                       <div className="text-center py-32">
                         <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 border border-premium-border">
                           <Mail className="w-10 h-10 text-gray-500" />
@@ -661,7 +677,7 @@ export default function UserDashboard() {
                         <p className="text-gray-400 mt-2 font-medium">Waiting for incoming emails...</p>
                       </div>
                     ) : (
-                      emails.map((email) => (
+                      emails.filter(e => !aliases.find(a => a.alias === e.recipientAlias)?.isDeleted).map((email) => (
                         <div 
                           key={email._id} 
                           onClick={() => setSelectedEmail(email)}
@@ -737,7 +753,7 @@ export default function UserDashboard() {
                     <h3 className="text-xl font-bold text-white tracking-tight">Email IDs</h3>
                   </div>
                   <div className="divide-y divide-premium-border">
-                    {aliases.length === 0 && !loading && !error ? (
+                    {aliases.filter(a => !a.isDeleted).length === 0 && !loading && !error ? (
                       <div className="text-center py-32">
                         <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 border border-premium-border">
                           <Database className="w-10 h-10 text-gray-500" />
@@ -746,7 +762,7 @@ export default function UserDashboard() {
                         <p className="text-gray-400 mt-2 font-medium">You don't have any email IDs yet.</p>
                       </div>
                     ) : (
-                      aliases.map((alias) => {
+                      aliases.filter(a => !a.isDeleted).map((alias) => {
                         const timer = getTimerDisplay(alias.createdAt);
                         return (
                           <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -782,20 +798,99 @@ export default function UserDashboard() {
                               </div>
                             </div>
                             
-                            {user?.isAdmin && (
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <select
-                                  value={alias.assignedTo || ''}
-                                  onChange={(e) => assignEmail(alias.alias, e.target.value)}
-                                  className="flex-1 sm:w-48 bg-black/50 border border-premium-border rounded-lg px-3 py-2 text-sm text-white focus:border-accent-primary outline-none transition-colors"
-                                >
-                                  <option value="">Unassigned</option>
-                                  {users.map(u => (
-                                    <option key={u._id} value={u._id}>{u.email}</option>
-                                  ))}
-                                </select>
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                              {user?.isAdmin && (
+                                <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                                  <select
+                                    value={alias.assignedTo || ''}
+                                    onChange={(e) => assignEmail(alias.alias, e.target.value)}
+                                    className="flex-1 sm:w-48 bg-black/50 border border-premium-border rounded-lg px-3 py-2 text-sm text-white focus:border-accent-primary outline-none transition-colors"
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {users.map(u => (
+                                      <option key={u._id} value={u._id}>{u.email}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/my-aliases/${alias._id}`, {
+                                      method: 'DELETE',
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (res.ok) {
+                                      // Update local state
+                                      useUserStore.getState().setAliases(aliases.filter(a => a._id !== alias._id));
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to delete alias', err);
+                                  }
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                                title="Delete Email ID"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'restore' && (
+                <div className="glass-panel overflow-hidden">
+                  <div className="p-6 border-b border-premium-border flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-white tracking-tight">Restorable Email IDs</h3>
+                  </div>
+                  <div className="divide-y divide-premium-border">
+                    {aliases.filter(a => a.isDeleted).length === 0 && !loading && !error ? (
+                      <div className="text-center py-32">
+                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 border border-premium-border">
+                          <RotateCcw className="w-10 h-10 text-gray-500" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white tracking-tight">No Deleted Email IDs</h3>
+                        <p className="text-gray-400 mt-2 font-medium">You haven't deleted any email IDs.</p>
+                      </div>
+                    ) : (
+                      aliases.filter(a => a.isDeleted).map((alias) => {
+                        const aliasEmailCount = emails.filter(e => e.recipientAlias === alias.alias).length;
+                        return (
+                          <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <span className="font-bold text-white text-lg">{alias.alias}</span>
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30">
+                                  {aliasEmailCount} {aliasEmailCount === 1 ? 'Email' : 'Emails'}
+                                </span>
                               </div>
-                            )}
+                            </div>
+                            
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/my-aliases/${alias._id}/restore`, {
+                                      method: 'PUT',
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (res.ok) {
+                                      useUserStore.getState().setAliases(aliases.map(a => a._id === alias._id ? { ...a, isDeleted: false } : a));
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to restore alias', err);
+                                  }
+                                }}
+                                className="px-4 py-2 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95 flex items-center gap-2"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                                Restore
+                              </button>
+                            </div>
                           </div>
                         );
                       })

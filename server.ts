@@ -60,6 +60,7 @@ const emailAliasSchema = new mongoose.Schema({
   alias: { type: String, required: true, unique: true },
   status: { type: String, enum: ['admin', 'stocking', 'stocked', 'assigned', 'unassigned'], default: 'stocking' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 const EmailAlias = mongoose.model('EmailAlias', emailAliasSchema);
@@ -278,6 +279,32 @@ async function startServer() {
       }
       const aliases = await EmailAlias.find(query).sort({ createdAt: -1 });
       res.json(aliases);
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.delete('/api/my-aliases/:id', authenticateToken, async (req: any, res) => {
+    try {
+      let query: any = { _id: req.params.id, assignedTo: req.user.id };
+      if (req.user.isAdmin) {
+        query = { _id: req.params.id };
+      }
+      await EmailAlias.findOneAndUpdate(query, { isDeleted: true });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.put('/api/my-aliases/:id/restore', authenticateToken, async (req: any, res) => {
+    try {
+      let query: any = { _id: req.params.id, assignedTo: req.user.id };
+      if (req.user.isAdmin) {
+        query = { _id: req.params.id };
+      }
+      await EmailAlias.findOneAndUpdate(query, { isDeleted: false });
+      res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
