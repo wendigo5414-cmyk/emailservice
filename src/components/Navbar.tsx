@@ -29,12 +29,12 @@ export default function Navbar() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center shadow-[0_0_15px_rgba(0,243,255,0.5)] group-hover:shadow-[0_0_25px_rgba(188,19,254,0.6)] transition-all duration-300">
               <span className="font-bold text-white">P</span>
             </div>
-            <span className="font-bold text-xl tracking-wider text-white text-glow-blue group-hover:text-glow-purple transition-all duration-300">PRIME X HUB</span>
+            <span className="font-bold text-lg sm:text-xl tracking-wider text-white text-glow-blue group-hover:text-glow-purple transition-all duration-300">PRIME X HUB</span>
           </Link>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
             <Link to="/checkout" className="relative text-gray-300 hover:text-white transition-colors hover:scale-110 transform duration-200">
-              <ShoppingCart className="w-6 h-6" />
+              <ShoppingCart className="w-5 h-5 md:w-6 md:h-6" />
               {cartCount > 0 && (
                 <span className="absolute -top-2 -right-2 bg-neon-red text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-[0_0_10px_rgba(255,0,60,0.8)] animate-pulse">
                   {cartCount}

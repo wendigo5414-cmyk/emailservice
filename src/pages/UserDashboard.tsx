@@ -50,27 +50,43 @@ type User = {
 export default function UserDashboard() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
-  const [activeTab, setActiveTabState] = useState<'inbox' | 'trash' | 'aliases'>(() => {
+  const [activeTab, setActiveTabState] = useState<'inbox' | 'trash' | 'aliases' | 'restore'>(() => {
     const hash = window.location.hash.replace('#', '');
-    return ['inbox', 'trash', 'aliases'].includes(hash) ? (hash as any) : 'inbox';
+    if (hash === 'live-otp') return 'inbox';
+    return ['inbox', 'trash', 'aliases', 'restore'].includes(hash) ? (hash as any) : 'inbox';
   });
 
-  const setActiveTab = (tab: 'inbox' | 'trash' | 'aliases') => {
+  const [liveMode, setLiveMode] = useState(() => window.location.hash === '#live-otp');
+
+  const setActiveTab = (tab: 'inbox' | 'trash' | 'aliases' | 'restore') => {
     setActiveTabState(tab);
+    setLiveMode(false);
     window.location.hash = tab;
+  };
+
+  const toggleLiveMode = (enabled: boolean) => {
+    setLiveMode(enabled);
+    if (enabled) {
+      window.location.hash = 'live-otp';
+    } else {
+      window.location.hash = activeTab;
+    }
   };
 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (['inbox', 'trash', 'aliases'].includes(hash)) {
+      if (hash === 'live-otp') {
+        setLiveMode(true);
+        setActiveTabState('inbox');
+      } else if (['inbox', 'trash', 'aliases', 'restore'].includes(hash)) {
+        setLiveMode(false);
         setActiveTabState(hash as any);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
-  const [liveMode, setLiveMode] = useState(false);
   
   const { emails, users, aliases, setEmails, setUsers } = useUserStore();
   
@@ -87,6 +103,8 @@ export default function UserDashboard() {
       Notification.requestPermission();
     }
   }, []);
+
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const fetchEmails = useCallback(async (isInitial = false) => {
     if (!token) {
@@ -110,6 +128,7 @@ export default function UserDashboard() {
       if (!res.ok) throw new Error(`Failed to fetch emails. Status: ${res.status}`);
       
       const data = await res.json();
+      setLastUpdated(new Date());
       console.log(`[FRONTEND EMAIL FETCH] Received ${data.length} emails from server.`);
       
       if (data.length > 0) {
@@ -205,9 +224,18 @@ export default function UserDashboard() {
     const interval = setInterval(() => {
       fetchEmails(false);
       fetchAliases();
-    }, 3000); // Poll every 3 seconds
+    }, 2000); // Poll every 2 seconds for faster updates
     return () => clearInterval(interval);
   }, [fetchEmails, fetchUsers, fetchAliases]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchEmails(false);
+      fetchAliases();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchEmails, fetchAliases]);
 
   const deleteEmail = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -324,13 +352,22 @@ export default function UserDashboard() {
   if (liveMode) {
     return (
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center text-gray-200 p-4 relative antialiased selection:bg-accent-primary/30">
-        <button
-          onClick={() => setLiveMode(false)}
-          className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 bg-black/50 hover:bg-black border border-premium-border rounded-full transition-all duration-200 active:scale-95"
-        >
-          <Power className="w-4 h-4 text-red-500" />
-          <span className="text-sm font-medium text-gray-300">Exit Live Mode</span>
-        </button>
+        <div className="absolute top-6 right-6 flex items-center gap-3">
+          <button
+            onClick={() => fetchEmails(false)}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-premium-border rounded-full transition-all duration-200 active:scale-95 md:hidden"
+          >
+            <RefreshCw className={cn("w-4 h-4 text-accent-primary", loading && "animate-spin")} />
+            <span className="text-sm font-medium text-gray-300">Refresh</span>
+          </button>
+          <button
+            onClick={() => toggleLiveMode(false)}
+            className="flex items-center gap-2 px-4 py-2 bg-black/50 hover:bg-black border border-premium-border rounded-full transition-all duration-200 active:scale-95"
+          >
+            <Power className="w-4 h-4 text-red-500" />
+            <span className="text-sm font-medium text-gray-300">Exit Live Mode</span>
+          </button>
+        </div>
 
         {!latestEmail ? (
           <div className="flex flex-col items-center text-gray-500">
@@ -368,6 +405,9 @@ export default function UserDashboard() {
                 <span>For: <span className="text-gray-300">{latestEmail.recipientAlias}</span></span>
                 <span className="w-1 h-1 rounded-full bg-gray-700"></span>
                 <span>Received {formatDistanceToNow(new Date(latestEmail.receivedAt || latestEmail.timestamp))} ago</span>
+              </div>
+              <div className="text-[10px] text-gray-600 font-mono mt-4">
+                Last checked: {lastUpdated.toLocaleTimeString()}
               </div>
             </div>
           </div>
@@ -497,7 +537,7 @@ export default function UserDashboard() {
             Back to Home
           </button>
           <button
-            onClick={() => setLiveMode(true)}
+            onClick={() => toggleLiveMode(true)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 md:shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95"
           >
             <Power className="w-4 h-4 text-white" />
@@ -685,45 +725,48 @@ export default function UserDashboard() {
                         <div 
                           key={email._id} 
                           onClick={() => setSelectedEmail(email)}
-                          className="group flex items-center gap-4 px-6 py-4 hover:bg-white/5 cursor-pointer transition-all duration-200 border-l-2 border-transparent hover:border-accent-primary"
+                          className="group flex flex-col md:flex-row md:items-center gap-2 md:gap-4 px-4 md:px-6 py-3 md:py-4 hover:bg-white/5 cursor-pointer transition-all duration-200 border-l-2 border-transparent hover:border-accent-primary"
                         >
-                          <div className="w-48 shrink-0 flex items-center gap-3 truncate">
-                            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0 border border-premium-border group-hover:bg-accent-primary/20 transition-colors">
-                              <span className="text-xs font-bold text-gray-300 group-hover:text-accent-primary">{getSenderName(email.from).charAt(0).toUpperCase()}</span>
+                          <div className="w-full md:w-48 shrink-0 flex items-center gap-3 truncate">
+                            <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0 border border-premium-border group-hover:bg-accent-primary/20 transition-colors">
+                              <span className="text-[10px] md:text-xs font-bold text-gray-300 group-hover:text-accent-primary">{getSenderName(email.from).charAt(0).toUpperCase()}</span>
                             </div>
-                            <span className="font-bold text-white text-sm truncate">
+                            <span className="font-bold text-white text-xs md:text-sm truncate">
                               {getSenderName(email.from)}
                             </span>
+                            <div className="md:hidden ml-auto text-[10px] font-bold text-gray-500">
+                              {formatDistanceToNow(new Date(email.receivedAt || email.timestamp), { addSuffix: true })}
+                            </div>
                           </div>
                           
-                          <div className="flex-1 min-w-0 flex items-center gap-3 text-sm">
-                            <span className="font-bold text-white truncate max-w-[250px]">
+                          <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center gap-1 md:gap-3 text-xs md:text-sm">
+                            <span className="font-bold text-white truncate md:max-w-[250px]">
                               {email.subject || '(No Subject)'}
                             </span>
-                            <span className="text-gray-600 shrink-0 font-bold">-</span>
+                            <span className="hidden md:inline text-gray-600 shrink-0 font-bold">-</span>
                             <span className="text-gray-400 truncate font-medium">
                               {email.fullBody.replace(/\s+/g, ' ').substring(0, 120)}
                             </span>
                           </div>
                           
                           {user?.isAdmin && (
-                            <div className="w-auto shrink-0 text-xs flex gap-2">
+                            <div className="w-full md:w-auto shrink-0 text-[10px] md:text-xs flex flex-wrap gap-2 mt-1 md:mt-0">
                               {email.status === 'admin' && (
-                                <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">ADMIN</span>
+                                <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md font-bold tracking-wide">ADMIN</span>
                               )}
                               {email.status === 'pending' && (
-                                <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">PENDING</span>
+                                <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md font-bold tracking-wide">PENDING</span>
                               )}
                               {email.status === 'stock' && (
-                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide hidden md:inline-block">STOCK</span>
+                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md font-bold tracking-wide">STOCK</span>
                               )}
                               {email.assignedTo ? (
-                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">
+                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md font-bold tracking-wide">
                                   <span className="hidden md:inline">ASSIGNED TO: {users.find(u => u._id === email.assignedTo)?.username || 'Unknown'}</span>
                                   <span className="md:hidden">ASSIGNED</span>
                                 </span>
                               ) : (
-                                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-md font-bold tracking-wide">
+                                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md font-bold tracking-wide">
                                   <span className="hidden md:inline">Unassigned</span>
                                   <span className="md:hidden">UNASSIGNED</span>
                                 </span>
@@ -731,17 +774,17 @@ export default function UserDashboard() {
                             </div>
                           )}
                           
-                          <div className="w-28 shrink-0 text-right text-xs font-bold text-gray-500 group-hover:hidden">
+                          <div className="hidden md:block w-28 shrink-0 text-right text-xs font-bold text-gray-500 group-hover:hidden">
                             {formatDistanceToNow(new Date(email.receivedAt || email.timestamp), { addSuffix: true })}
                           </div>
 
-                          <div className="w-28 shrink-0 flex justify-end gap-2 hidden group-hover:flex">
+                          <div className="w-full md:w-28 shrink-0 flex justify-end gap-2 hidden group-hover:flex">
                             <button
                               onClick={(e) => deleteEmail(email._id, e)}
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors active:scale-95"
+                              className="p-1.5 md:p-2 text-gray-400 hover:text-red-400 md:hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors active:scale-95"
                               title="Delete"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                             </button>
                           </div>
                         </div>
@@ -769,22 +812,22 @@ export default function UserDashboard() {
                       aliases.filter(a => !a.isDeleted).map((alias) => {
                         const timer = getTimerDisplay(alias.createdAt);
                         return (
-                          <div key={alias._id} className="p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div key={alias._id} className="p-4 md:p-6 hover:bg-white/5 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="min-w-0 w-full sm:flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <span className="font-bold text-white text-lg truncate" title={alias.alias}>{alias.alias}</span>
+                              <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
+                                <span className="font-bold text-white text-base md:text-lg truncate max-w-[200px] md:max-w-none" title={alias.alias}>{alias.alias}</span>
                                 {timer.isAged ? (
-                                  <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                                  <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
                                     AGED
                                   </span>
                                 ) : (
-                                  <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30 flex items-center gap-1">
-                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold bg-accent-primary/20 text-accent-primary border border-accent-primary/30 flex items-center gap-1">
+                                    <RefreshCw className="w-2.5 h-2.5 md:w-3 md:h-3 animate-spin" />
                                     {timer.text}
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-3 text-sm">
+                              <div className="flex flex-wrap items-center gap-2 md:gap-3 text-[10px] md:text-sm">
                                 <span className={cn(
                                   "px-2 py-0.5 rounded-full font-bold border",
                                   alias.status === 'unassigned' ? "bg-gray-500/20 text-gray-400 border-gray-500/30" :
@@ -795,7 +838,7 @@ export default function UserDashboard() {
                                   {alias.status.toUpperCase()}
                                 </span>
                                 {alias.assignedTo && (
-                                  <span className="text-gray-400">
+                                  <span className="text-gray-400 truncate max-w-[150px] md:max-w-none">
                                     Assigned to: <span className="text-white font-medium">{users.find(u => u._id === alias.assignedTo)?.email || 'Unknown User'}</span>
                                   </span>
                                 )}

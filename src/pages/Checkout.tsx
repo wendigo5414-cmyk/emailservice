@@ -108,7 +108,7 @@ export default function Checkout() {
       >
         {step === 1 && (
           <div>
-            <h2 className="text-2xl font-bold mb-6 text-white">Review Order</h2>
+            <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-white">Review Order</h2>
             <div className="space-y-4 mb-8">
               {items.map(item => (
                 <div key={item.productId} className="flex items-center justify-between bg-black/30 p-4 rounded-lg border border-white/5">
@@ -140,7 +140,7 @@ export default function Checkout() {
 
         {step === 2 && (
           <div>
-            <h2 className="text-2xl font-bold mb-6 text-white">Customer Details</h2>
+            <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-white">Customer Details</h2>
             <div className="space-y-4 mb-8">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Roblox Username (Optional)</label>
@@ -176,15 +176,15 @@ export default function Checkout() {
 
         {step === 3 && orderInfo && (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-2 text-white">Awaiting Payment</h2>
-            <p className="text-gray-400 mb-6">Send EXACTLY the amount below to the address.</p>
+            <h2 className="text-xl md:text-2xl font-bold mb-2 text-white">Awaiting Payment</h2>
+            <p className="text-xs md:text-gray-400 mb-4 md:mb-6">Send EXACTLY the amount below to the address.</p>
             
-            <div className="bg-black/50 border border-neon-orange/30 p-6 rounded-xl mb-8 inline-block">
-              <div className="text-4xl font-extrabold text-neon-orange mb-2">{orderInfo.exactCryptoAmount.toFixed(2)} USDT</div>
-              <div className="text-sm text-gray-400 mb-6">Network: TRC20 (Tron)</div>
+            <div className="bg-black/50 border border-neon-orange/30 p-4 md:p-6 rounded-xl mb-6 md:mb-8 inline-block w-full max-w-sm">
+              <div className="text-2xl md:text-4xl font-extrabold text-neon-orange mb-1 md:mb-2">{orderInfo.exactCryptoAmount.toFixed(2)} USDT</div>
+              <div className="text-[10px] md:text-sm text-gray-400 mb-4 md:mb-6">Network: TRC20 (Tron)</div>
               
-              <div className="bg-white p-4 rounded-lg inline-block mb-6">
-                <QRCodeSVG value={`USDT:TYourWalletAddressHere?amount=${orderInfo.exactCryptoAmount}`} size={200} />
+              <div className="bg-white p-2 md:p-4 rounded-lg inline-block mb-4 md:mb-6">
+                <QRCodeSVG value={`USDT:TYourWalletAddressHere?amount=${orderInfo.exactCryptoAmount}`} size={window.innerWidth < 768 ? 150 : 200} />
               </div>
               
               <div className="bg-gray-900 p-3 rounded border border-white/10 text-sm font-mono break-all text-gray-300 select-all">

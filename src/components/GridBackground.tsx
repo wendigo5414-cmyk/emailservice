@@ -4,6 +4,9 @@ export default function GridBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // Disable on mobile for performance
+    if (window.innerWidth < 768) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -109,7 +112,7 @@ export default function GridBackground() {
       <div className="fixed inset-0 z-[-3] bg-[#0a0a0a]" />
       
       {/* Subtle Premium Gradients */}
-      <div className="fixed inset-0 z-[-2] pointer-events-none opacity-30">
+      <div className="fixed inset-0 z-[-2] pointer-events-none opacity-30 hidden md:block">
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-violet-600/20 rounded-full blur-[120px] mix-blend-screen transform-gpu"></div>
       </div>

@@ -151,23 +151,23 @@ export default function AdminDashboard() {
         <ShieldAlert className="w-8 h-8 text-accent-primary" /> <span className="premium-gradient-text">Admin Control Panel</span>
       </h1>
 
-      <div className="flex flex-wrap gap-4 mb-8 border-b border-premium-border pb-4 items-center">
-        <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'config' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
+      <div className="flex overflow-x-auto no-scrollbar gap-4 mb-8 border-b border-premium-border pb-4 items-center whitespace-nowrap">
+        <button onClick={() => setActiveTab('config')} className={`shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'config' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
           <Settings className="w-4 h-4" /> Config
         </button>
-        <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'products' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
+        <button onClick={() => setActiveTab('products')} className={`shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'products' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
           <Package className="w-4 h-4" /> Products
         </button>
-        <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'orders' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
+        <button onClick={() => setActiveTab('orders')} className={`shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'orders' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
           <ShoppingBag className="w-4 h-4" /> Orders
         </button>
-        <button onClick={() => setActiveTab('emails')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'emails' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
+        <button onClick={() => setActiveTab('emails')} className={`shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'emails' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
           <Mail className="w-4 h-4" /> Admin Inbox
         </button>
-        <button onClick={() => setActiveTab('stocking')} className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'stocking' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
+        <button onClick={() => setActiveTab('stocking')} className={`shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${activeTab === 'stocking' ? 'bg-accent-primary text-white md:shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-accent-primary/50' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent hover:border-premium-border'}`}>
           <Database className="w-4 h-4" /> Stocking Area
         </button>
-        <button onClick={() => navigate('/emails')} className={`ml-auto px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 bg-white/5 text-gray-300 hover:bg-white/10 border border-transparent hover:border-premium-border`}>
+        <button onClick={() => navigate('/emails')} className={`shrink-0 ml-auto px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 bg-white/5 text-gray-300 hover:bg-white/10 border border-transparent hover:border-premium-border`}>
           <Mail className="w-4 h-4" /> User Emails
         </button>
       </div>
@@ -176,22 +176,22 @@ export default function AdminDashboard() {
         {activeTab === 'config' && (
           <div>
             <h2 className="text-xl font-bold text-white mb-6">Email Processing Mode</h2>
-            <div className="flex gap-4">
+            <div className="flex overflow-x-auto no-scrollbar gap-4 pb-2 whitespace-nowrap">
               <button 
                 onClick={() => handleModeChange('OFF')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'OFF' ? 'bg-red-500/20 text-red-400 border-red-500/50 md:shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
+                className={`shrink-0 px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'OFF' ? 'bg-red-500/20 text-red-400 border-red-500/50 md:shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
               >
                 OFF (Ignore)
               </button>
               <button 
                 onClick={() => handleModeChange('STOCKING')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'STOCKING' ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 md:shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
+                className={`shrink-0 px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'STOCKING' ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 md:shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
               >
                 STOCKING (7 Days Pending)
               </button>
               <button 
                 onClick={() => handleModeChange('ADMIN')}
-                className={`px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'ADMIN' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 md:shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
+                className={`shrink-0 px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'ADMIN' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 md:shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
               >
                 ADMIN (Direct to Inbox)
               </button>
@@ -254,7 +254,7 @@ export default function AdminDashboard() {
         {activeTab === 'orders' && (
           <div>
             <h2 className="text-xl font-bold text-white mb-4">Recent Orders</h2>
-            <div className="overflow-x-auto rounded-xl border border-premium-border">
+            <div className="overflow-x-auto no-scrollbar rounded-xl border border-premium-border">
               <table className="w-full text-left text-gray-300">
                 <thead className="bg-black/50 border-b border-premium-border">
                   <tr>
@@ -312,7 +312,7 @@ export default function AdminDashboard() {
             
             <div className="mb-8">
               <h3 className="text-lg font-bold text-white mb-4">Email Aliases</h3>
-              <div className="overflow-x-auto rounded-xl border border-premium-border">
+              <div className="overflow-x-auto no-scrollbar rounded-xl border border-premium-border">
                 <table className="w-full text-left text-gray-300">
                   <thead className="bg-black/50 border-b border-premium-border">
                     <tr>

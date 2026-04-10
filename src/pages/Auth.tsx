@@ -130,7 +130,7 @@ export default function Auth() {
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="text-3xl font-bold text-center mb-8 premium-gradient-text"
+            className="text-2xl md:text-3xl font-bold text-center mb-6 md:mb-8 premium-gradient-text"
           >
             {isLogin ? 'Welcome Back' : 'Create Account'}
           </motion.h2>
