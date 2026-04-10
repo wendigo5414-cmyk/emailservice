@@ -26,6 +26,16 @@
   .glass-panel {
     @apply bg-premium-card border border-premium-border shadow-2xl rounded-2xl backdrop-blur-xl;
   }
+  
+  /* Mobile optimizations for glass effects */
+  @media (max-width: 768px) {
+    .glass, .glass-panel {
+      backdrop-filter: none !important;
+      box-shadow: none !important;
+      background-color: #111111 !important;
+    }
+  }
+
   .premium-gradient-text {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400;
   }
@@ -38,6 +48,14 @@
   .text-glow-red {
     text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
   }
+  
+  /* Disable text glow on mobile for performance */
+  @media (max-width: 768px) {
+    .text-glow-blue, .text-glow-red {
+      text-shadow: none !important;
+    }
+  }
+
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -61,6 +79,13 @@ body {
   overflow-x: hidden;
 }
 
+/* Disable grid background on mobile */
+@media (max-width: 768px) {
+  body {
+    background-image: none;
+  }
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -73,6 +98,13 @@ body::before {
   pointer-events: none;
 }
 
+/* Disable radial gradient on mobile */
+@media (max-width: 768px) {
+  body::before {
+    display: none;
+  }
+}
+
 /* Animated Dots Background */
 .particles-container {
   position: fixed;
@@ -83,6 +115,13 @@ body::before {
   z-index: -2;
   pointer-events: none;
   overflow: hidden;
+}
+
+/* Disable particles on mobile */
+@media (max-width: 768px) {
+  .particles-container {
+    display: none;
+  }
 }
 
 .particle {

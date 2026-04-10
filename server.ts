@@ -263,7 +263,7 @@ async function startServer() {
     try {
       let query: any = { assignedTo: req.user.id };
       if (req.user.isAdmin) {
-        query = { $or: [{ assignedTo: req.user.id }, { status: 'admin' }] };
+        query = { $or: [{ assignedTo: req.user.id }, { status: 'admin' }, { status: 'pending' }] };
       }
       const emails = await Email.find(query).sort({ receivedAt: -1 });
       res.json(emails);

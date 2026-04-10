@@ -94,14 +94,16 @@ export default function UserDashboard() {
       return;
     }
     try {
+      const currentEmails = useUserStore.getState().emails;
       console.log(`[FRONTEND EMAIL FETCH] Starting fetch. isInitial: ${isInitial}`);
-      if (isInitial && emails.length === 0) setLoading(true);
+      if (isInitial && currentEmails.length === 0) setLoading(true);
       
       const endpoint = '/api/my-emails';
       console.log(`[FRONTEND EMAIL FETCH] Calling endpoint: ${endpoint}`);
       
       const res = await fetch(endpoint, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        cache: 'no-store'
       });
       
       console.log(`[FRONTEND EMAIL FETCH] Response status: ${res.status}`);
@@ -147,7 +149,7 @@ export default function UserDashboard() {
       }
 
       // Only update if data actually changed to prevent unnecessary re-renders
-      if (JSON.stringify(emails) !== JSON.stringify(data)) {
+      if (JSON.stringify(currentEmails) !== JSON.stringify(data)) {
         console.log(`[FRONTEND EMAIL FETCH] Data changed, updating state.`);
         setEmails(data);
       } else {
@@ -163,13 +165,14 @@ export default function UserDashboard() {
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [token, user, emails, setEmails]);
+  }, [token, user, setEmails]);
 
   const fetchUsers = useCallback(async () => {
     if (!token || !user?.isAdmin) return;
     try {
       const res = await fetch('/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        cache: 'no-store'
       });
       if (res.ok) {
         setUsers(await res.json());
@@ -183,7 +186,8 @@ export default function UserDashboard() {
     if (!token) return;
     try {
       const res = await fetch('/api/my-aliases', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        cache: 'no-store'
       });
       if (res.ok) {
         const { setAliases } = useUserStore.getState();
@@ -334,7 +338,7 @@ export default function UserDashboard() {
             <p className="text-lg font-medium tracking-tight">Waiting for incoming emails...</p>
           </div>
         ) : latestEmail.otp ? (
-          <div className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+          <div key={latestEmail._id} className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-full px-4">
             <div className="text-emerald-400 mb-6 text-xs uppercase tracking-[0.2em] font-bold flex items-center gap-3 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 transform-gpu"></span>
@@ -342,21 +346,21 @@ export default function UserDashboard() {
               </span>
               Latest OTP Received
             </div>
-            <div className="text-[7rem] sm:text-[11rem] font-mono font-bold leading-none tracking-tighter text-white mb-10 text-glow-blue">
+            <div className="text-[4.5rem] sm:text-[11rem] font-mono font-bold leading-none tracking-tighter text-white mb-6 sm:mb-10 text-glow-blue break-all text-center w-full">
               {latestEmail.otp}
             </div>
             
-            <div className="flex flex-col items-center gap-8">
+            <div className="flex flex-col items-center gap-6 sm:gap-8">
               <button
                 onClick={() => handleCopy(latestEmail.otp!)}
                 className={cn(
-                  "flex items-center gap-3 px-8 py-4 rounded-full text-lg font-semibold transition-all duration-200 active:scale-95",
+                  "flex items-center gap-2 sm:gap-3 px-6 py-3 sm:px-8 sm:py-4 rounded-full text-base sm:text-lg font-semibold transition-all duration-200 active:scale-95",
                   copied 
-                    ? "bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]" 
-                    : "bg-accent-primary text-white hover:bg-blue-600 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                    ? "bg-emerald-500 text-white md:shadow-[0_0_20px_rgba(16,185,129,0.4)]" 
+                    : "bg-accent-primary text-white hover:bg-blue-600 md:shadow-[0_0_15px_rgba(59,130,246,0.5)]"
                 )}
               >
-                {copied ? <CheckCircle2 className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
+                {copied ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <Copy className="w-5 h-5 sm:w-6 sm:h-6" />}
                 {copied ? "Copied to Clipboard" : "Copy OTP"}
               </button>
               
@@ -392,7 +396,7 @@ export default function UserDashboard() {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity md:hidden"
+          className="fixed inset-0 bg-black/60 z-40 transition-opacity md:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
@@ -422,9 +426,9 @@ export default function UserDashboard() {
           <Database className="w-3.5 h-3.5 text-gray-400" />
           <span className="text-gray-400">Database</span>
           {error ? (
-            <span className="ml-auto text-red-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span> Disconnected</span>
+            <span className="ml-auto text-red-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 md:shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span> Disconnected</span>
           ) : (
-            <span className="ml-auto text-emerald-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span> Connected</span>
+            <span className="ml-auto text-emerald-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 md:shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span> Connected</span>
           )}
         </div>
         
@@ -494,7 +498,7 @@ export default function UserDashboard() {
           </button>
           <button
             onClick={() => setLiveMode(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 md:shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95"
           >
             <Power className="w-4 h-4 text-white" />
             Live OTP Mode
@@ -505,7 +509,7 @@ export default function UserDashboard() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-transparent relative min-w-0">
         {/* Mobile Header */}
-        <div className="md:hidden glass border-b border-premium-border px-4 py-3 flex items-center justify-between shrink-0 shadow-sm z-20 sticky top-0 bg-black/80 backdrop-blur-xl">
+        <div className="md:hidden glass border-b border-premium-border px-4 py-3 flex items-center justify-between shrink-0 md:shadow-sm z-20 sticky top-0 bg-black/80">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(true)}
@@ -590,7 +594,7 @@ export default function UserDashboard() {
             )}
 
             {error && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400 shadow-sm animate-in fade-in slide-in-from-top-2 backdrop-blur-md">
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400 shadow-sm animate-in fade-in slide-in-from-top-2 md:backdrop-blur-md">
                 <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
                 <div>
                   <h3 className="font-bold">Connection Error</h3>
@@ -885,7 +889,7 @@ export default function UserDashboard() {
                                     console.error('Failed to restore alias', err);
                                   }
                                 }}
-                                className="px-4 py-2 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95 flex items-center gap-2"
+                                className="px-4 py-2 bg-accent-primary hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all duration-200 md:shadow-[0_0_15px_rgba(59,130,246,0.5)] active:scale-95 flex items-center gap-2"
                               >
                                 <RotateCcw className="w-4 h-4" />
                                 Restore
