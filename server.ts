@@ -229,26 +229,33 @@ async function startServer() {
     try {
       let query: any = { assignedTo: req.user.id };
       if (req.user.isAdmin) {
-        query = { $or: [{ assignedTo: req.user.id }, { status: 'admin' }, { status: 'pending' }] };
+        // Admins can see ALL recent live OTPs regardless of assignment or status
+        query = {}; 
       }
       
-      // Find the latest email with an OTP
-      const latestEmail = await Email.findOne({ 
+      // Find the latest 4 emails with an OTP
+      const latestEmails = await Email.find({ 
         ...query,
         otp: { $ne: null, $exists: true } 
-      }).sort({ receivedAt: -1 });
+      })
+      .sort({ receivedAt: -1 })
+      .limit(4);
 
-      if (!latestEmail) {
+      if (!latestEmails || latestEmails.length === 0) {
         return res.status(404).json({ error: 'No OTP found' });
       }
 
-      res.json({
-        email: latestEmail.recipientAlias,
-        otp: latestEmail.otp,
-        receivedAt: latestEmail.receivedAt,
-        from: latestEmail.from,
-        subject: latestEmail.subject
-      });
+      const formattedOTPs = latestEmails.map(email => ({
+        email: email.recipientAlias,
+        otp: email.otp,
+        receivedAt: email.receivedAt,
+        from: email.from,
+        subject: email.subject
+      }));
+
+      // If only one is requested historically, we return the array. 
+      // User can access formattedOTPs[0] for the absolute latest.
+      res.json(formattedOTPs);
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
