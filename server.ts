@@ -133,6 +133,14 @@ async function startServer() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
   app.use(cookieParser());
 
+  // Middleware to normalize double slashes in URLs
+  app.use((req, res, next) => {
+    if (req.url.includes('//')) {
+      req.url = req.url.replace(/\/+/g, '/');
+    }
+    next();
+  });
+
   // --- Auth Routes ---
   app.post('/api/auth/register', async (req, res) => {
     try {
@@ -674,9 +682,30 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(process.cwd(), 'dist')));
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    
+    // SPA Fallback - Exclude API and other functional routes
     app.get('*', (req, res) => {
-      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+      // If it's an API route that wasn't matched, return 404 instead of index.html
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API route not found' });
+      }
+      
+      const indexPath = path.join(distPath, 'index.html');
+      
+      // Specifically check if file exists to provide better error feedback
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`[SERVER ERROR] Failed to send index.html: ${err.message}`);
+          res.status(500).send(`
+            <h1>Production Build Missing</h1>
+            <p>The file <b>/dist/index.html</b> was not found.</p>
+            <p>Please make sure you have run <b>npm run build</b> on your server before starting.</p>
+            <p>Current Directory: ${process.cwd()}</p>
+          `);
+        }
+      });
     });
   }
 
