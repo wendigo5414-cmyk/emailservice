@@ -5,6 +5,7 @@ import path from 'path';
 import { simpleParser } from 'mailparser';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import cookieParser from 'cookie-parser';
 
 // --- MongoDB Setup ---
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/nexus-hub';
@@ -99,7 +100,13 @@ mongoose.connection.once('open', initConfig);
 // --- Middleware ---
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+  
+  // Also check for token in cookies
+  if (!token && req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+
   if (!token) return res.status(401).json({ error: 'Access denied' });
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
@@ -124,6 +131,7 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(cookieParser());
 
   // --- Auth Routes ---
   app.post('/api/auth/register', async (req, res) => {
@@ -152,6 +160,14 @@ async function startServer() {
       await newUser.save();
 
       const token = jwt.sign({ id: newUser._id, username: newUser.username, isAdmin: newUser.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
+      
+      // Set cookie
+      res.cookie('token', token, { 
+        httpOnly: true, 
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
+      });
+
       res.json({ token, user: { id: newUser._id, username: newUser.username, email: newUser.email, isAdmin: newUser.isAdmin } });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
@@ -176,6 +192,14 @@ async function startServer() {
       }
 
       const token = jwt.sign({ id: user._id, username: user.username, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
+      
+      // Set cookie
+      res.cookie('token', token, { 
+        httpOnly: true, 
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
+      });
+
       res.json({ token, user: { id: user._id, username: user.username, email: user.email, isAdmin: user.isAdmin } });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
@@ -187,6 +211,36 @@ async function startServer() {
       const user = await User.findById(req.user.id).select('-password');
       if (!user) return res.status(404).json({ error: 'User not found' });
       res.json({ user });
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // --- Live OTP API ---
+  app.get('/api/live-otp/latest', authenticateToken, async (req: any, res) => {
+    try {
+      let query: any = { assignedTo: req.user.id };
+      if (req.user.isAdmin) {
+        query = { $or: [{ assignedTo: req.user.id }, { status: 'admin' }, { status: 'pending' }] };
+      }
+      
+      // Find the latest email with an OTP
+      const latestEmail = await Email.findOne({ 
+        ...query,
+        otp: { $ne: null, $exists: true } 
+      }).sort({ receivedAt: -1 });
+
+      if (!latestEmail) {
+        return res.status(404).json({ error: 'No OTP found' });
+      }
+
+      res.json({
+        email: latestEmail.recipientAlias,
+        otp: latestEmail.otp,
+        receivedAt: latestEmail.receivedAt,
+        from: latestEmail.from,
+        subject: latestEmail.subject
+      });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
@@ -552,32 +606,43 @@ async function startServer() {
 
       // Check or create EmailAlias to determine permanent status
       let aliasDoc = await EmailAlias.findOne({ alias: to });
+      let finalStatus = 'pending';
+      let assignedTo = null;
+
       if (!aliasDoc) {
-        let initialStatus = 'stocking';
-        if (String(currentMode).toUpperCase() === 'ADMIN') initialStatus = 'admin';
-        if (String(currentMode).toUpperCase() === 'OFF') initialStatus = 'unassigned';
-        
-        aliasDoc = new EmailAlias({ alias: to, status: initialStatus });
-        await aliasDoc.save();
-        console.log(`[EMAIL WEBHOOK] Created new EmailAlias for ${to} with status ${initialStatus}`);
+        if (String(currentMode).toUpperCase() === 'OFF') {
+          // Special case for OFF mode: don't create alias, save as admin email
+          finalStatus = 'admin';
+          console.log(`[EMAIL WEBHOOK] Mode is OFF and no alias found for ${to}. Saving as admin email without alias.`);
+        } else {
+          let initialStatus = 'stocking';
+          if (String(currentMode).toUpperCase() === 'ADMIN') initialStatus = 'admin';
+          
+          aliasDoc = new EmailAlias({ alias: to, status: initialStatus });
+          await aliasDoc.save();
+          console.log(`[EMAIL WEBHOOK] Created new EmailAlias for ${to} with status ${initialStatus}`);
+          
+          if (aliasDoc.status === 'admin') finalStatus = 'admin';
+          else finalStatus = 'pending';
+        }
       } else {
         console.log(`[EMAIL WEBHOOK] Found existing EmailAlias for ${to} with status ${aliasDoc.status}`);
+        
+        if (aliasDoc.isDeleted) {
+          console.log(`[EMAIL WEBHOOK] Alias ${to} is deleted. Incrementing deletedMessageCount and skipping email save.`);
+          aliasDoc.deletedMessageCount = (aliasDoc.deletedMessageCount || 0) + 1;
+          await aliasDoc.save();
+          return res.status(200).json({ success: true, message: 'Email skipped for deleted alias' });
+        }
+
+        // Map alias status to email status
+        if (aliasDoc.status === 'admin') finalStatus = 'admin';
+        else if (aliasDoc.status === 'stocked') finalStatus = 'stock';
+        else if (aliasDoc.status === 'assigned') finalStatus = 'sold';
+        else if (aliasDoc.status === 'unassigned') finalStatus = 'unassigned';
+        assignedTo = aliasDoc.assignedTo;
       }
 
-      if (aliasDoc.isDeleted) {
-        console.log(`[EMAIL WEBHOOK] Alias ${to} is deleted. Incrementing deletedMessageCount and skipping email save.`);
-        aliasDoc.deletedMessageCount = (aliasDoc.deletedMessageCount || 0) + 1;
-        await aliasDoc.save();
-        return res.status(200).json({ success: true, message: 'Email skipped for deleted alias' });
-      }
-
-      // Map alias status to email status
-      let finalStatus = 'pending';
-      if (aliasDoc.status === 'admin') finalStatus = 'admin';
-      else if (aliasDoc.status === 'stocked') finalStatus = 'stock';
-      else if (aliasDoc.status === 'assigned') finalStatus = 'sold';
-      else if (aliasDoc.status === 'unassigned') finalStatus = 'unassigned';
-      
       console.log(`[EMAIL WEBHOOK] Saving email with status: ${finalStatus}`);
 
       const newEmail = new Email({
@@ -588,7 +653,7 @@ async function startServer() {
         from,
         subject,
         status: finalStatus,
-        assignedTo: aliasDoc.assignedTo
+        assignedTo: assignedTo
       });
       await newEmail.save();
       

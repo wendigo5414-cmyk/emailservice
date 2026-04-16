@@ -181,7 +181,7 @@ export default function AdminDashboard() {
                 onClick={() => handleModeChange('OFF')}
                 className={`shrink-0 px-6 py-3 rounded-lg font-bold transition-all border ${currentMode === 'OFF' ? 'bg-red-500/20 text-red-400 border-red-500/50 md:shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/50 border-premium-border text-gray-400 hover:bg-white/5 hover:border-gray-500'}`}
               >
-                OFF (Ignore)
+                OFF (Admin Inbox)
               </button>
               <button 
                 onClick={() => handleModeChange('STOCKING')}
